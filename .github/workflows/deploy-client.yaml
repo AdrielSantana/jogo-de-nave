@@ -27,10 +27,7 @@ jobs:
           password: ${{ secrets.SSH_KEY_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            sudo kill $(lsof -t -i:3333) || sudo fuser -k 3333/tcp
-            sudo -i
             cd /home/jogo-de-nave/client
             git pull origin main
             npm ci
             npm run build
-            npm run preview
