@@ -1,8 +1,14 @@
 import { useRef, useEffect } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { Spaceship } from "../../domain/entities/Spaceship";
-import { Mesh, Vector3, Quaternion, Euler } from "three";
-import { PerspectiveCamera } from "@react-three/drei";
+import {
+  Mesh,
+  Vector3,
+  PerspectiveCamera as ThreePerspectiveCamera,
+  Euler,
+  MathUtils,
+} from "three";
+import { PerspectiveCamera, OrbitControls } from "@react-three/drei";
 
 interface PlayerShipProps {
   player: Spaceship;
@@ -10,6 +16,16 @@ interface PlayerShipProps {
 
 export const PlayerShip = ({ player }: PlayerShipProps) => {
   const meshRef = useRef<Mesh>(null);
+  const cameraRef = useRef<ThreePerspectiveCamera>(null);
+  const orbitControlsRef = useRef<any>(null);
+
+  // Camera state
+  const cameraRotation = useRef(new Euler(0, 0, 0));
+  const freeLookSensitivity = 0.002;
+  const returnToNormalSpeed = 0.05;
+  // Add max angle constraints
+  const MAX_VERTICAL_ANGLE = Math.PI / 6; // 45 degrees up/down
+  const MAX_HORIZONTAL_ANGLE = Math.PI / 4; // 90 degrees left/right
 
   // Physics constants
   const acceleration = 0.008; // Base acceleration rate
@@ -17,6 +33,10 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
   const rotateAcceleration = 0.0000025; // Base rotation acceleration
   const maxRotationSpeed = 0.01; // Maximum rotation speed
   const rollAcceleration = 0.00005; // Roll acceleration (matched with rotate)
+
+  // Camera settings
+  const firstPersonPosition = new Vector3(0, 0.5, 0);
+  const thirdPersonPosition = new Vector3(0, 3, 8);
 
   // Inertia and damping settings
   const dampingFactor = 0.995; // Very slight natural damping (almost none, more space-like)
@@ -41,7 +61,13 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
     down: false,
     rolling: false,
     rollDirection: 0,
+    freeLook: false, // New free look state
+    thirdPerson: false, // New camera mode state
   });
+
+  // Add these new refs for camera control
+  const lastMouseX = useRef(0);
+  const lastMouseY = useRef(0);
 
   useEffect(() => {
     document.body.requestPointerLock();
@@ -75,6 +101,21 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
           movement.current.rolling = true;
           movement.current.rollDirection = -1;
           break;
+        case "c":
+          movement.current.freeLook = true;
+          // replace cameras
+          break;
+        case "v":
+          movement.current.thirdPerson = !movement.current.thirdPerson;
+          // Reset camera position when switching modes
+          if (cameraRef.current) {
+            if (movement.current.thirdPerson) {
+              cameraRef.current.position.copy(thirdPersonPosition);
+            } else {
+              cameraRef.current.position.copy(firstPersonPosition);
+            }
+          }
+          break;
         case "escape":
           document.exitPointerLock();
           break;
@@ -106,23 +147,81 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
           movement.current.rolling = false;
           movement.current.rollDirection = 0;
           break;
+        case "c":
+          movement.current.freeLook = false;
+          // Reset camera in first person mode
+          if (!movement.current.thirdPerson && cameraRef.current) {
+            // replace cameras
+          }
+          // Reset camera in third person mode
+          if (movement.current.thirdPerson && cameraRef.current) {
+            // replace cameras
+          }
+          break;
       }
     };
 
     const handleMouseMove = (e: MouseEvent) => {
       if (meshRef.current) {
-        // Add to rotation acceleration with inertia
-        const rotX = -e.movementY * rotateAcceleration;
-        const rotY = -e.movementX * rotateAcceleration;
+        if (movement.current.freeLook) {
+          if (movement.current.thirdPerson && orbitControlsRef.current) {
+            // Third person orbital camera - handled by OrbitControls
+            return;
+          } else if (cameraRef.current) {
+            // First person free look
+            const deltaX = e.movementX * freeLookSensitivity;
+            const deltaY = e.movementY * freeLookSensitivity;
 
-        rotationVelocity.current.x +=
-          rotX + lastRotationAcceleration.current.x * rotationInertiaFactor;
-        rotationVelocity.current.y +=
-          rotY + lastRotationAcceleration.current.y * rotationInertiaFactor;
+            // Update camera rotation with constraints
+            cameraRotation.current.y = MathUtils.clamp(
+              cameraRotation.current.y - deltaX,
+              -MAX_HORIZONTAL_ANGLE,
+              MAX_HORIZONTAL_ANGLE
+            );
+            cameraRotation.current.x = MathUtils.clamp(
+              cameraRotation.current.x - deltaY,
+              -MAX_VERTICAL_ANGLE,
+              MAX_VERTICAL_ANGLE
+            );
 
-        lastRotationAcceleration.current.x = rotX;
-        lastRotationAcceleration.current.y = rotY;
+            // Apply rotation to camera
+            cameraRef.current.rotation.x = cameraRotation.current.x;
+            cameraRef.current.rotation.y = cameraRotation.current.y;
+          }
+        } else {
+          // Normal ship rotation
+          const rotX = -e.movementY * rotateAcceleration;
+          const rotY = -e.movementX * rotateAcceleration;
+
+          rotationVelocity.current.x +=
+            rotX + lastRotationAcceleration.current.x * rotationInertiaFactor;
+          rotationVelocity.current.y +=
+            rotY + lastRotationAcceleration.current.y * rotationInertiaFactor;
+
+          lastRotationAcceleration.current.x = rotX;
+          lastRotationAcceleration.current.y = rotY;
+
+          // Reset camera rotation when not in free look
+          if (cameraRef.current) {
+            cameraRotation.current.x = MathUtils.lerp(
+              cameraRotation.current.x,
+              0,
+              returnToNormalSpeed
+            );
+            cameraRotation.current.y = MathUtils.lerp(
+              cameraRotation.current.y,
+              0,
+              returnToNormalSpeed
+            );
+
+            cameraRef.current.rotation.x = cameraRotation.current.x;
+            cameraRef.current.rotation.y = cameraRotation.current.y;
+          }
+        }
       }
+
+      lastMouseX.current = e.clientX;
+      lastMouseY.current = e.clientY;
     };
 
     const handleClick = () => {
@@ -215,13 +314,45 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
       player.position.copy(meshRef.current.position);
       player.rotation.copy(meshRef.current.quaternion);
     }
+
+    // Update orbit controls if in third person free look
+    if (
+      movement.current.freeLook &&
+      movement.current.thirdPerson &&
+      orbitControlsRef.current
+    ) {
+      orbitControlsRef.current.update();
+    }
   });
 
   return (
-    <mesh ref={meshRef}>
-      <PerspectiveCamera makeDefault position={[0, 5, 12]} fov={75} />
-      <boxGeometry args={[1, 0.5, 2]} />
-      <meshStandardMaterial color="blue" />
-    </mesh>
+    <>
+      <mesh ref={meshRef}>
+        <PerspectiveCamera
+          ref={cameraRef}
+          position={
+            movement.current.thirdPerson
+              ? thirdPersonPosition
+              : firstPersonPosition
+          }
+          makeDefault
+          fov={75}
+        />
+        <boxGeometry args={[1, 0.5, 2]} />
+        <meshStandardMaterial color="blue" />
+      </mesh>
+
+      {movement.current.thirdPerson && movement.current.freeLook && (
+        <OrbitControls
+          ref={orbitControlsRef}
+          camera={cameraRef.current!}
+          enablePan={false}
+          enableZoom={true}
+          minDistance={5}
+          maxDistance={15}
+          target={meshRef.current ? meshRef.current.position : new Vector3()}
+        />
+      )}
+    </>
   );
 };
