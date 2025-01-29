@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Stars } from "@react-three/drei";
+import { Stars } from "@react-three/drei";
 import { useGameStore } from "../../infrastructure/store/gameStore";
 import { PlayerShip } from "./PlayerShip";
 import { useEffect } from "react";
@@ -16,7 +16,6 @@ export const GameScene = () => {
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
       <Stars />
-      <OrbitControls />
       {player && <PlayerShip player={player} />}
     </Canvas>
   );

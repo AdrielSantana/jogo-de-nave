@@ -34,7 +34,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { player } = get();
     if (player) {
       player.update(deltaTime);
-      // set({ player: { ...player } });
+      set({ player });
     }
   },
 
