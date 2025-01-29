@@ -23,14 +23,28 @@ jobs:
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          password: ${{ secrets.SSH_KEY_PASSPHRASE }}
-          port: ${{ secrets.SSH_PORT }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
           script: |
-            sudo kill $(lsof -t -i:3333) || sudo fuser -k 3333/tcp
-            sudo -i
-            cd /home/jogo-de-nave/client
+            set -e
+            # Install Node.js and npm if not present
+            if ! command -v node &> /dev/null; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
+            fi
+
+            # Kill existing process if running
+            pkill -f "npm run preview" || true
+
+            cd /root/jogo-de-nave/client
             git pull origin main
-            npm ci
+
+            # Clear npm cache and node_modules if there are issues
+            rm -rf node_modules package-lock.json
+            npm cache clean --force
+
+            # Install dependencies and build
+            npm install
             npm run build
             npm run preview
