@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy-client:
+  deploy-server:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,10 +27,11 @@ jobs:
           password: ${{ secrets.SSH_KEY_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            sudo kill $(lsof -t -i:8888) || sudo fuser -k 8888/tcp
-            sudo -i
             cd /home/jogo-de-nave/server
             git pull origin main
             npm ci
             npm run build
-            npm run preview
+            mkdir -p logs
+            npm run pm2:stop || true
+            npm run pm2:start
+            pm2 save
