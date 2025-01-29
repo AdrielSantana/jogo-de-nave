@@ -1,0 +1,35 @@
+name: Client Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "client/**"
+  workflow_dispatch:
+
+jobs:
+  deploy-client:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Deploy Client
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            sudo kill $(lsof -t -i:3333) || sudo fuser -k 3333/tcp
+            cd /home/jogo-de-nave/client
+            git pull origin main
+            npm ci
+            npm run build
+            npm run preview
