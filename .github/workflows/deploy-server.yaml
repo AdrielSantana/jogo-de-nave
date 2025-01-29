@@ -34,4 +34,4 @@ jobs:
             mkdir -p logs
             npm run pm2:stop || true
             npm run pm2:start
-            pm2 save
+            npm run pm2:save
