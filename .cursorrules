@@ -1,0 +1,67 @@
+# Space Combat Game Development Rules
+
+## Code Organization and Structure
+
+1. Follow the client-server architecture pattern:
+  - Keep game logic on server (reference main.js)
+  - Handle rendering and input on client (reference game.js)
+  - Maintain clear separation of concerns
+
+2. Networking Rules:
+  - Use WebSocket for real-time communication
+  - Implement state synchronization
+  - Handle latency and interpolation
+  - Validate all server-side inputs
+
+3. Game Client Rules:
+  - Use Three.js for 3D rendering
+  - Implement smooth animations and transitions
+  - Handle user input responsively
+  - Maintain consistent frame rate
+  - Follow object-oriented patterns
+
+4. Physics and Movement:
+  - Server authoritative movement
+  - Implement realistic space physics
+  - Handle collisions accurately
+  - Use quaternions for rotation
+
+5. Asset Management:
+  - Load 3D models asynchronously
+  - Implement proper loading screens
+  - Handle loading errors gracefully
+  - Optimize asset performance
+
+6. Audio System:
+  - Initialize audio on user interaction
+  - Implement 3D positional audio
+  - Handle multiple sound effects
+  - Manage audio resources efficiently
+
+7. UI/UX Guidelines:
+  - Clear, responsive HUD
+  - Intuitive controls
+  - Consistent visual feedback
+  - Proper loading states
+  - Error handling with user feedback
+
+8. Performance Rules:
+  - Optimize render loops
+  - Efficient state management
+  - Proper garbage collection
+  - Frame rate optimization
+  - Memory management
+
+9. Multiplayer Features:
+  - Player synchronization
+  - Score tracking
+  - Respawn system
+  - Player identification
+  - Collision detection
+
+10. Error Handling:
+  - Graceful disconnection handling
+  - Asset loading fallbacks
+  - Input validation
+  - Connection error recovery
+  - State reconciliation

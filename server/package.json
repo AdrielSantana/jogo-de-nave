@@ -2,10 +2,10 @@
   "name": "jogo-naves",
   "version": "1.0.0",
   "description": "Multiplayer space shooter game with authoritative server",
-  "main": "server/server.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node server/server.js",
-    "dev": "nodemon server/server.js"
+    "start": "node main.js",
+    "dev": "nodemon main.js"
   },
   "dependencies": {
     "cannon-es": "^0.20.0",
