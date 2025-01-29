@@ -24,8 +24,8 @@ jobs:
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_KEY_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT }}
-          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
           script: |
             sudo kill $(lsof -t -i:3333) || sudo fuser -k 3333/tcp
             cd /home/jogo-de-nave/client
