@@ -1,0 +1,12 @@
+services:
+  server:
+    build: .
+    container_name: server
+    ports:
+      - 8888:8888
+    volumes:
+      - .:/usr/src/app
+    command: sh -c "/wait; npm ci; npm run dev"
+    environment:
+      - NODE_ENV=development
+      - PORT=8888
