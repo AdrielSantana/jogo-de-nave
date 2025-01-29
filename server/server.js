@@ -436,7 +436,7 @@ function interpolateQuaternions(a, b, t) {
 }
 
 // Start server
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3333;
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
   gameLoop(); // Start game loop
