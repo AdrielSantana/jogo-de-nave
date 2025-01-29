@@ -26,10 +26,9 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
-          script_stop: true
+          port: ${{ secrets.SSH_PORT }}
           script: |
-            set -e
-            sudo kill $(lsof -t -i:3333) || sudo fuser -k 3333/tcp || true
+            sudo kill $(lsof -t -i:3333) || sudo fuser -k 3333/tcp
             cd /home/jogo-de-nave/client
             git pull origin main
             npm ci
