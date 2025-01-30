@@ -1,7 +1,7 @@
 import { useRef, useMemo, useEffect, useCallback } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { Atmosphere } from "./Atmosphere";
+import { UltraGlobeAtmosphere } from "./UltraGlobeAtmosphere";
 
 const noiseFunctions = `
 const float PI = 3.14159265;
@@ -135,9 +135,10 @@ interface ProceduralPlanetProps {
     color4: THREE.Color;
     color5: THREE.Color;
   };
-  rotation?: number;
   atmosphereThickness?: number;
   atmosphereColor?: THREE.Color;
+  hasRings?: boolean;
+  ringsColor?: THREE.Color;
 }
 
 export const ProceduralPlanet = ({
@@ -150,8 +151,9 @@ export const ProceduralPlanet = ({
     color4: new THREE.Color(0.15, 0.35, 0.1), // Vegetation
     color5: new THREE.Color(0.15, 0.15, 0.15), // Mountains - More gray with slight blue tint
   },
-  rotation = 0,
-  atmosphereThickness = 15,
+  atmosphereThickness = 1,
+  hasRings = false,
+  ringsColor = new THREE.Color(0.6, 0.6, 0.6),
   atmosphereColor = new THREE.Color(0.6, 0.8, 1.0),
 }: ProceduralPlanetProps) => {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -159,7 +161,7 @@ export const ProceduralPlanet = ({
   const matrixRef = useRef(new THREE.Matrix4());
 
   // Fixed light direction in world space
-  const lightDir = useMemo(() => new THREE.Vector3(-1, -1, -1).normalize(), []);
+  const lightDir = useMemo(() => new THREE.Vector3(0, 0, 0).normalize(), []);
 
   // Matrix to transform light direction from world to object space
   const updateLightDirection = useCallback(() => {
@@ -186,7 +188,7 @@ export const ProceduralPlanet = ({
   // Update light direction when rotation changes
   useEffect(() => {
     updateLightDirection();
-  }, [rotation, updateLightDirection]);
+  }, [updateLightDirection]);
 
   useFrame(() => {
     updateLightDirection();
@@ -260,8 +262,8 @@ export const ProceduralPlanet = ({
       octaves: { value: 12 },
       ambientIntensity: { value: 0.03 },
       diffuseIntensity: { value: 1.2 },
-      specularIntensity: { value: 2.5 },
-      shininess: { value: 12.0 },
+      specularIntensity: { value: 1 },
+      shininess: { value: 10.0 },
       lightDirection: { value: lightDir },
       lightColor: { value: new THREE.Color(1, 1, 1) },
       bumpStrength: { value: 1.0 },
@@ -317,7 +319,7 @@ export const ProceduralPlanet = ({
   });
 
   return (
-    <group>
+    <>
       <mesh
         ref={meshRef}
         geometry={lodGeometries[0]}
@@ -492,11 +494,18 @@ export const ProceduralPlanet = ({
           uniforms={planetParams}
         />
       </mesh>
-      <Atmosphere
-        planetRadius={radius}
-        atmosphereThickness={atmosphereThickness}
+      <UltraGlobeAtmosphere
+        radius={radius}
+        atmosphereDensity={atmosphereThickness}
+        sunPosition={lightDir}
+        hasRings={hasRings}
+        cloudCoverage={0.5}
+        cloudDensity={0.5}
+        windSpeed={0.2}
+        weatherChangeSpeed={0.05}
+        ringsColor={ringsColor}
         atmosphereColor={atmosphereColor}
       />
-    </group>
+    </>
   );
 };

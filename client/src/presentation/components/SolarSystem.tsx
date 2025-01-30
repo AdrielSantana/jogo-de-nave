@@ -49,6 +49,8 @@ interface PlanetConfig {
     // Atmosphere
     atmosphereThickness: number;
     atmosphereColor: THREE.Color;
+    hasRings?: boolean;
+    ringsColor?: THREE.Color;
   };
 }
 
@@ -90,8 +92,8 @@ const planets: PlanetConfig[] = [
         color4: new THREE.Color(0.15, 0.35, 0.1),
         color5: new THREE.Color(0.25, 0.25, 0.25),
       },
-      atmosphereThickness: 2.5,
-      atmosphereColor: new THREE.Color(0.6, 0.8, 1.0),
+      atmosphereThickness: 0.5,
+      atmosphereColor: new THREE.Color(0.4, 0.6, 1.0),
     },
   },
   {
@@ -130,8 +132,10 @@ const planets: PlanetConfig[] = [
         color4: new THREE.Color(0.6, 0.3, 0.1),
         color5: new THREE.Color(0.4, 0.25, 0.15),
       },
-      atmosphereThickness: 2.0,
+      atmosphereThickness: 0.5,
       atmosphereColor: new THREE.Color(1.0, 0.8, 0.6),
+      hasRings: true,
+      ringsColor: new THREE.Color(0.6, 0.6, 0.6),
     },
   },
   {
@@ -170,7 +174,7 @@ const planets: PlanetConfig[] = [
         color4: new THREE.Color(0.5, 0.6, 0.7),
         color5: new THREE.Color(0.4, 0.5, 0.6),
       },
-      atmosphereThickness: 3.0,
+      atmosphereThickness: 0.5,
       atmosphereColor: new THREE.Color(0.8, 0.9, 1.0),
     },
   },
@@ -210,7 +214,7 @@ const planets: PlanetConfig[] = [
         color4: new THREE.Color(0.4, 0.15, 0.0),
         color5: new THREE.Color(0.2, 0.1, 0.1),
       },
-      atmosphereThickness: 2.25,
+      atmosphereThickness: 0.5,
       atmosphereColor: new THREE.Color(0.8, 0.3, 0.1),
     },
   },
@@ -250,7 +254,7 @@ const planets: PlanetConfig[] = [
         color4: new THREE.Color(0.4, 0.3, 0.5),
         color5: new THREE.Color(0.2, 0.2, 0.3),
       },
-      atmosphereThickness: 2.75,
+      atmosphereThickness: 0.7,
       atmosphereColor: new THREE.Color(0.4, 0.6, 0.5),
     },
   },
@@ -286,9 +290,10 @@ const Planet = ({ config }: { config: PlanetConfig }) => {
         radius={config.planetParams.radius}
         amplitude={config.planetParams.amplitude}
         colors={config.planetParams.colors}
-        rotation={rotationRef.current}
         atmosphereThickness={config.planetParams.atmosphereThickness}
         atmosphereColor={config.planetParams.atmosphereColor}
+        hasRings={config.planetParams.hasRings}
+        ringsColor={config.planetParams.ringsColor}
       />
     </group>
   );
@@ -298,7 +303,7 @@ export const SolarSystem = () => {
   return (
     <group>
       {/* Add the Sun at the center with reduced size */}
-      <Sun radius={80} position={[500, 0, 500]} />
+      <Sun radius={80} position={[0, 0, 0]} />
 
       {/* Existing planets */}
       {planets.map((planet) => (

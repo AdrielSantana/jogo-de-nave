@@ -29,12 +29,20 @@ export const Sun = ({ radius = 100, position = [0, 0, 0] }: SunProps) => {
       const lensflare = new Lensflare();
 
       lensflare.addElement(
-        new LensflareElement(textureFlare0, 700, 0, new THREE.Color(0x6699ff))
+        new LensflareElement(textureFlare0, 700, 0, new THREE.Color(0xffdd66))
       );
-      lensflare.addElement(new LensflareElement(textureFlare3, 60, 0.6));
-      lensflare.addElement(new LensflareElement(textureFlare3, 70, 0.7));
-      lensflare.addElement(new LensflareElement(textureFlare3, 120, 0.9));
-      lensflare.addElement(new LensflareElement(textureFlare3, 70, 1));
+      lensflare.addElement(
+        new LensflareElement(textureFlare3, 60, 0.6, new THREE.Color(0xffdd66))
+      );
+      lensflare.addElement(
+        new LensflareElement(textureFlare3, 70, 0.7, new THREE.Color(0xffdd66))
+      );
+      lensflare.addElement(
+        new LensflareElement(textureFlare3, 120, 0.9, new THREE.Color(0xffdd66))
+      );
+      lensflare.addElement(
+        new LensflareElement(textureFlare3, 70, 1, new THREE.Color(0xffdd66))
+      );
 
       lightRef.current.add(lensflare);
     }
