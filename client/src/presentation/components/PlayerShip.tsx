@@ -17,15 +17,14 @@ interface PlayerShipProps {
 export const PlayerShip = ({ player }: PlayerShipProps) => {
   const meshRef = useRef<Mesh>(null);
   const cameraRef = useRef<ThreePerspectiveCamera>(null);
-  const orbitControlsRef = useRef<any>(null);
 
   // Camera state
   const cameraRotation = useRef(new Euler(0, 0, 0));
   const freeLookSensitivity = 0.002;
   const returnToNormalSpeed = 0.05;
   // Add max angle constraints
-  const MAX_VERTICAL_ANGLE = Math.PI / 6; // 45 degrees up/down
-  const MAX_HORIZONTAL_ANGLE = Math.PI / 4; // 90 degrees left/right
+  const MAX_VERTICAL_ANGLE = Math.PI / 6; // 30 degrees up/down
+  const MAX_HORIZONTAL_ANGLE = Math.PI / 4; // 45 degrees left/right
 
   // Physics constants
   const acceleration = 0.008; // Base acceleration rate
@@ -149,14 +148,6 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
           break;
         case "c":
           movement.current.freeLook = false;
-          // Reset camera in first person mode
-          if (!movement.current.thirdPerson && cameraRef.current) {
-            // replace cameras
-          }
-          // Reset camera in third person mode
-          if (movement.current.thirdPerson && cameraRef.current) {
-            // replace cameras
-          }
           break;
       }
     };
@@ -164,10 +155,7 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
     const handleMouseMove = (e: MouseEvent) => {
       if (meshRef.current) {
         if (movement.current.freeLook) {
-          if (movement.current.thirdPerson && orbitControlsRef.current) {
-            // Third person orbital camera - handled by OrbitControls
-            return;
-          } else if (cameraRef.current) {
+          if (cameraRef.current) {
             // First person free look
             const deltaX = e.movementX * freeLookSensitivity;
             const deltaY = e.movementY * freeLookSensitivity;
@@ -314,15 +302,6 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
       player.position.copy(meshRef.current.position);
       player.rotation.copy(meshRef.current.quaternion);
     }
-
-    // Update orbit controls if in third person free look
-    if (
-      movement.current.freeLook &&
-      movement.current.thirdPerson &&
-      orbitControlsRef.current
-    ) {
-      orbitControlsRef.current.update();
-    }
   });
 
   return (
@@ -341,18 +320,6 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
         <boxGeometry args={[1, 0.5, 2]} />
         <meshStandardMaterial color="blue" />
       </mesh>
-
-      {movement.current.thirdPerson && movement.current.freeLook && (
-        <OrbitControls
-          ref={orbitControlsRef}
-          camera={cameraRef.current!}
-          enablePan={false}
-          enableZoom={true}
-          minDistance={5}
-          maxDistance={15}
-          target={meshRef.current ? meshRef.current.position : new Vector3()}
-        />
-      )}
     </>
   );
 };
