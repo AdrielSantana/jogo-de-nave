@@ -27,29 +27,32 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
   const MAX_HORIZONTAL_ANGLE = Math.PI / 4; // 45 degrees left/right
 
   // Physics constants
-  const acceleration = 0.008; // Base acceleration rate
-  const maxSpeed = 1.0; // Maximum speed
-  const rotateAcceleration = 0.0000025; // Base rotation acceleration
-  const maxRotationSpeed = 0.01; // Maximum rotation speed
-  const rollAcceleration = 0.00005; // Roll acceleration (matched with rotate)
+  const acceleration = 0.0008; // Base acceleration
+  const boostMultiplier = 2.5; // Boost multiplier when right mouse button is pressed
+  const maxSpeed = 0.1; // Base max speed
+  const maxBoostSpeed = 0.25; // Max speed while boosting
+  const rotateAcceleration = 0.0000025;
+  const maxRotationSpeed = 0.01;
+  const rollAcceleration = 0.00005;
 
   // Camera settings
-  const firstPersonPosition = new Vector3(0, 0.5, 0);
-  const thirdPersonPosition = new Vector3(0, 3, 8);
+  const firstPersonPosition = new Vector3(0, 0.05, 0);
+  const thirdPersonPosition = new Vector3(0, 1, 3);
 
   // Inertia and damping settings
-  const dampingFactor = 0.995; // Very slight natural damping (almost none, more space-like)
-  const rotationDamping = 0.995; // Rotation persistence
-  const inertiaFactor = 0.25; // How much current velocity affects acceleration
-  const rotationInertiaFactor = 0.01; // How much current rotation affects new rotations
-  const principalThrusterStrength = 1.0; // Base thruster power multiplier
-  const sideThrusterStrength = 0.5; // Base thruster power multiplier
+  const dampingFactor = 0.995;
+  const rotationDamping = 0.995;
+  const inertiaFactor = 0.25;
+  const rotationInertiaFactor = 0.01;
+  const principalThrusterStrength = 1.0;
+  const sideThrusterStrength = 0.5;
 
   // Store velocity and rotation velocity as refs
   const velocity = useRef(new Vector3());
-  const rotationVelocity = useRef(new Vector3()); // x: pitch, y: yaw, z: roll
-  const lastAcceleration = useRef(new Vector3()); // Store last acceleration for inertia
-  const lastRotationAcceleration = useRef(new Vector3()); // Store last rotation acceleration
+  const rotationVelocity = useRef(new Vector3());
+  const lastAcceleration = useRef(new Vector3());
+  const lastRotationAcceleration = useRef(new Vector3());
+  const isBoostingRef = useRef(false);
 
   const movement = useRef({
     forward: false,
@@ -60,8 +63,8 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
     down: false,
     rolling: false,
     rollDirection: 0,
-    freeLook: false, // New free look state
-    thirdPerson: false, // New camera mode state
+    freeLook: false,
+    thirdPerson: false,
   });
 
   // Add these new refs for camera control
@@ -218,16 +221,40 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
       }
     };
 
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) {
+        // Right mouse button
+        isBoostingRef.current = true;
+      }
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) {
+        // Right mouse button
+        isBoostingRef.current = false;
+      }
+    };
+
+    const handleContextMenu = (e: Event) => {
+      e.preventDefault(); // Prevent context menu from appearing
+    };
+
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("click", handleClick);
+    window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("contextmenu", handleContextMenu);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("click", handleClick);
+      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("contextmenu", handleContextMenu);
       document.exitPointerLock();
       document.body.style.cursor = "auto";
     };
@@ -238,19 +265,23 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
       // Calculate new acceleration with inertia
       const accelerationVector = new Vector3();
       const targetAcceleration = new Vector3();
+      const currentAcceleration = isBoostingRef.current
+        ? acceleration * boostMultiplier
+        : acceleration;
+      const currentMaxSpeed = isBoostingRef.current ? maxBoostSpeed : maxSpeed;
 
       if (movement.current.forward)
-        targetAcceleration.z -= acceleration * principalThrusterStrength;
+        targetAcceleration.z -= currentAcceleration * principalThrusterStrength;
       if (movement.current.backward)
-        targetAcceleration.z += acceleration * sideThrusterStrength;
+        targetAcceleration.z += currentAcceleration * sideThrusterStrength;
       if (movement.current.left)
-        targetAcceleration.x -= acceleration * sideThrusterStrength;
+        targetAcceleration.x -= currentAcceleration * sideThrusterStrength;
       if (movement.current.right)
-        targetAcceleration.x += acceleration * sideThrusterStrength;
+        targetAcceleration.x += currentAcceleration * sideThrusterStrength;
       if (movement.current.up)
-        targetAcceleration.y += acceleration * sideThrusterStrength;
+        targetAcceleration.y += currentAcceleration * sideThrusterStrength;
       if (movement.current.down)
-        targetAcceleration.y -= acceleration * sideThrusterStrength;
+        targetAcceleration.y -= currentAcceleration * sideThrusterStrength;
 
       // Blend new acceleration with previous acceleration (inertia)
       accelerationVector
@@ -268,9 +299,9 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
       // Apply damping
       velocity.current.multiplyScalar(dampingFactor);
 
-      // Limit speed
-      if (velocity.current.length() > maxSpeed) {
-        velocity.current.normalize().multiplyScalar(maxSpeed);
+      // Limit speed based on boost state
+      if (velocity.current.length() > currentMaxSpeed) {
+        velocity.current.normalize().multiplyScalar(currentMaxSpeed);
       }
 
       // Update position

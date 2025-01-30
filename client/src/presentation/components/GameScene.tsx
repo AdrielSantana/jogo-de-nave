@@ -1,63 +1,66 @@
 import { Canvas } from "@react-three/fiber";
-import { Stars } from "@react-three/drei";
 import { useGameStore } from "../../infrastructure/store/gameStore";
 import { PlayerShip } from "./PlayerShip";
 import { useEffect } from "react";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
-import { Color, Vector3 } from "three";
+import { Color } from "three";
+import * as THREE from "three";
 import { SolarSystem } from "./SolarSystem";
+import { useDetectGPU } from "@react-three/drei";
 
 export const GameScene = () => {
   const { initializePlayer, player } = useGameStore();
+  const GPU = useDetectGPU();
+  const isHighEnd = GPU.tier >= 2;
 
   useEffect(() => {
     initializePlayer();
   }, [initializePlayer]);
 
-  // Light direction should match the shader's expectation
-  const lightDirection = new Vector3(-1, -1, -1).normalize();
-
   return (
     <Canvas
       style={{ width: "100vw", height: "100vh" }}
-      camera={{ position: [0, 200, 800], fov: 60 }}
+      camera={{
+        position: [500, 80, 360],
+        fov: 45,
+        near: 0.01,
+        far: 100000,
+      }}
       gl={{
-        antialias: true,
+        antialias: false,
         toneMapping: 3, // ACESFilmicToneMapping
         toneMappingExposure: 0.5,
+        stencil: false,
+        depth: true,
+        powerPreference: "high-performance",
+      }}
+      onCreated={({ camera, gl }) => {
+        camera.matrixAutoUpdate = true;
+        camera.updateProjectionMatrix();
+        gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        gl.setClearColor(0x000000, 1);
       }}
     >
       {/* Dark background color */}
       <color attach="background" args={[0x000000]} />
 
-      {/* Very subtle ambient light */}
-      <ambientLight intensity={0.02} />
+      {/* Very subtle ambient light for base illumination */}
+      <ambientLight intensity={0.01} color={new Color(0x334455)} />
 
-      {/* Main directional light simulating a distant star */}
-      <directionalLight
-        position={lightDirection.clone().multiplyScalar(200)}
-        intensity={2.0}
-        color={new Color(1, 1, 1)}
-      />
-
-      <EffectComposer>
+      <EffectComposer
+        frameBufferType={THREE.HalfFloatType}
+        autoClear={true}
+        multisampling={0}
+      >
+        {/* Enhanced bloom effect for the sun */}
         <Bloom
-          intensity={0.2}
-          luminanceThreshold={0}
+          intensity={1.5}
+          luminanceThreshold={0.6}
           luminanceSmoothing={0.9}
-          mipmapBlur
+          mipmapBlur={true}
+          radius={0.8}
         />
       </EffectComposer>
-
-      <Stars
-        radius={2000}
-        depth={1000}
-        count={20000}
-        factor={4}
-        saturation={0}
-        fade
-        speed={0.5}
-      />
 
       {player && <PlayerShip player={player} />}
       <SolarSystem />

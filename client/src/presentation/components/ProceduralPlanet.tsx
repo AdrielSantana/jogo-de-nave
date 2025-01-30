@@ -1,4 +1,4 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect, useCallback } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Atmosphere } from "./Atmosphere";
@@ -300,52 +300,104 @@ interface ProceduralPlanetProps {
     color4: THREE.Color;
     color5: THREE.Color;
   };
+  rotation?: number;
+  atmosphereThickness?: number;
+  atmosphereColor?: THREE.Color;
 }
 
 export const ProceduralPlanet = ({
-  radius = 100.0,
-  amplitude = 2.5,
+  radius = 200.0,
+  amplitude = 5.0,
   colors = {
-    color1: new THREE.Color(0.014, 0.117, 0.279),
-    color2: new THREE.Color(0.08, 0.527, 0.351),
-    color3: new THREE.Color(0.62, 0.516, 0.372),
-    color4: new THREE.Color(0.149, 0.254, 0.084),
-    color5: new THREE.Color(0.15, 0.15, 0.15),
+    color1: new THREE.Color(0.02, 0.1, 0.35), // Deep ocean
+    color2: new THREE.Color(0.05, 0.3, 0.5), // Shallow water
+    color3: new THREE.Color(0.8, 0.7, 0.5), // Beach/Coast
+    color4: new THREE.Color(0.15, 0.35, 0.1), // Vegetation
+    color5: new THREE.Color(0.15, 0.15, 0.15), // Mountains - More gray with slight blue tint
   },
+  rotation = 0,
+  atmosphereThickness = 15,
+  atmosphereColor = new THREE.Color(0.6, 0.8, 1.0),
 }: ProceduralPlanetProps) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const worldPosition = new THREE.Vector3();
+  const matrixRef = useRef(new THREE.Matrix4());
+
+  // Fixed light direction in world space
+  const lightDir = useMemo(() => new THREE.Vector3(-1, -1, -1).normalize(), []);
+
+  // Matrix to transform light direction from world to object space
+  const updateLightDirection = useCallback(() => {
+    if (meshRef.current) {
+      // Get the world matrix of the mesh
+      meshRef.current.updateWorldMatrix(true, false);
+      // Get the inverse of the world matrix
+      matrixRef.current.copy(meshRef.current.matrixWorld).invert();
+      // Transform the light direction to object space
+      const objectSpaceLightDir = lightDir
+        .clone()
+        .applyMatrix4(matrixRef.current)
+        .normalize();
+
+      // Update the shader uniform
+      if (meshRef.current.material instanceof THREE.ShaderMaterial) {
+        meshRef.current.material.uniforms.lightDirection.value.copy(
+          objectSpaceLightDir
+        );
+      }
+    }
+  }, [lightDir]);
+
+  // Update light direction when rotation changes
+  useEffect(() => {
+    updateLightDirection();
+  }, [rotation, updateLightDirection]);
+
+  useFrame(() => {
+    updateLightDirection();
+  });
 
   // LOD configuration for geometry detail
   const lodLevels = useMemo(
     () => [
-      { distance: 200, segments: 128, bumpStrength: 0.8, amplitude: amplitude }, // Very close
       {
-        distance: 400,
+        distance: radius * 0.5, // Very close
+        segments: 256,
+        bumpStrength: 1,
+        amplitude: amplitude,
+      },
+      {
+        distance: radius * 2.0, // Close
+        segments: 128,
+        bumpStrength: 0.8,
+        amplitude: amplitude * 0.95,
+      },
+      {
+        distance: radius * 8.0, // Medium
         segments: 64,
         bumpStrength: 0.6,
         amplitude: amplitude * 0.9,
-      }, // Close
+      },
       {
-        distance: 800,
+        distance: radius * 32.0, // Far
         segments: 32,
         bumpStrength: 0.4,
         amplitude: amplitude * 0.8,
-      }, // Medium
+      },
       {
-        distance: 1600,
+        distance: radius * 128.0, // Very far
         segments: 16,
         bumpStrength: 0.2,
         amplitude: amplitude * 0.7,
-      }, // Far
+      },
       {
-        distance: Infinity,
+        distance: Infinity, // Extreme distance
         segments: 8,
         bumpStrength: 0.1,
         amplitude: amplitude * 0.6,
-      }, // Very far
+      },
     ],
-    [amplitude]
+    [radius, amplitude]
   );
 
   // Create geometries for each LOD level
@@ -360,50 +412,50 @@ export const ProceduralPlanet = ({
   // Current LOD level
   const currentLOD = useRef(0);
 
-  const lightDir = useMemo(() => new THREE.Vector3(-1, -1, -1).normalize(), []);
-
   const planetParams = useMemo(
     () => ({
       type: { value: 2 },
       radius: { value: radius },
       amplitude: { value: amplitude },
-      sharpness: { value: 2.0 },
-      offset: { value: -0.016 },
-      period: { value: 0.8 },
-      persistence: { value: 0.4 },
-      lacunarity: { value: 1.8 },
-      octaves: { value: 10 },
-      ambientIntensity: { value: 0.02 },
-      diffuseIntensity: { value: 1.0 },
-      specularIntensity: { value: 2.0 },
-      shininess: { value: 10.0 },
+      sharpness: { value: 3 },
+      offset: { value: -0.02 },
+      period: { value: 0.6 },
+      persistence: { value: 0.52 },
+      lacunarity: { value: 2.2 },
+      octaves: { value: 12 },
+      ambientIntensity: { value: 0.03 },
+      diffuseIntensity: { value: 1.2 },
+      specularIntensity: { value: 2.5 },
+      shininess: { value: 12.0 },
       lightDirection: { value: lightDir },
       lightColor: { value: new THREE.Color(1, 1, 1) },
-      bumpStrength: { value: 0.8 },
-      bumpOffset: { value: 0.001 },
-      color1: { value: colors.color1 },
-      color2: { value: colors.color2 },
-      color3: { value: colors.color3 },
-      color4: { value: colors.color4 },
-      color5: { value: colors.color5 },
-      transition2: { value: 0.071 },
-      transition3: { value: 0.215 },
-      transition4: { value: 0.372 },
-      transition5: { value: 1.2 },
-      blend12: { value: 0.152 },
-      blend23: { value: 0.152 },
-      blend34: { value: 0.104 },
-      blend45: { value: 0.168 },
-      atmosphereBlend: { value: 0.0 }, // New parameter for atmosphere blend
+      bumpStrength: { value: 1.0 },
+      bumpOffset: { value: 0.002 },
+      color1: { value: colors.color1 }, // Deep ocean
+      color2: { value: colors.color2 }, // Shallow water
+      color3: { value: colors.color3 }, // Beach/Coast
+      color4: { value: colors.color4 }, // Vegetation
+      color5: { value: colors.color5 }, // Mountains - More gray with slight blue tint
+      transition2: { value: 0.05 },
+      transition3: { value: 0.08 },
+      transition4: { value: 0.35 },
+      transition5: { value: 0.65 }, // Lower transition point for more mountains
+      blend12: { value: 0.02 },
+      blend23: { value: 0.03 },
+      blend34: { value: 0.15 },
+      blend45: { value: 0.25 }, // Wider blend for smoother mountain transition
+      atmosphereBlend: { value: 0.0 },
     }),
-    [radius, amplitude, colors, lightDir]
+    [radius, amplitude, lightDir]
   );
 
   useFrame((state) => {
     if (meshRef.current) {
       // Get world position and calculate distance
       meshRef.current.getWorldPosition(worldPosition);
-      const distance = state.camera.position.distanceTo(worldPosition);
+      const distance =
+        (state.camera.parent?.position.distanceTo(worldPosition) || radius) -
+        radius;
 
       // Determine appropriate LOD level
       let newLOD = lodLevels.findIndex((level) => distance < level.distance);
@@ -422,22 +474,20 @@ export const ProceduralPlanet = ({
         const maxDistance = lodLevels[lodLevels.length - 2].distance;
         const blend = Math.max(
           0,
-          Math.min(1, (distance - lodLevels[0].distance) / maxDistance)
+          Math.min(0.8, (distance - lodLevels[0].distance) / maxDistance) // Cap blend at 0.8 to maintain visibility
         );
         planetParams.atmosphereBlend.value = blend;
-
-        console.log(
-          `Planet LOD: ${newLOD}, Segments: ${
-            lodLevels[newLOD].segments
-          }, Blend: ${blend.toFixed(2)}`
-        );
       }
     }
   });
 
   return (
     <group>
-      <mesh ref={meshRef} geometry={lodGeometries[0]}>
+      <mesh
+        ref={meshRef}
+        geometry={lodGeometries[0]}
+        frustumCulled={false} // Disable frustum culling
+      >
         <shaderMaterial
           vertexShader={`
             attribute vec3 tangent;
@@ -607,7 +657,11 @@ export const ProceduralPlanet = ({
           uniforms={planetParams}
         />
       </mesh>
-      <Atmosphere planetRadius={radius} atmosphereThickness={radius * 0.05} />
+      <Atmosphere
+        planetRadius={radius}
+        atmosphereThickness={atmosphereThickness}
+        atmosphereColor={atmosphereColor}
+      />
     </group>
   );
 };

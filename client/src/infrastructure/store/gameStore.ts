@@ -20,8 +20,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   isGameOver: false,
 
   initializePlayer: () => {
+    // Start player far from the sun, near the earth-like planet
     const newPlayer = new Spaceship({
-      position: new Vector3(0, 0, 0),
+      position: new Vector3(500, 40, 200), // Position near earth-like planet
       rotation: new Quaternion(),
       velocity: new Vector3(0, 0, 0),
       health: 100,

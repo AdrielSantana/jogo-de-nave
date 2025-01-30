@@ -201,11 +201,13 @@ void main() {
 interface AtmosphereProps {
   planetRadius?: number;
   atmosphereThickness?: number;
+  atmosphereColor?: THREE.Color;
 }
 
 export const Atmosphere = ({
-  planetRadius = 100,
-  atmosphereThickness = 5,
+  planetRadius = 200,
+  atmosphereThickness = 15,
+  atmosphereColor = new THREE.Color(0.6, 0.8, 1.0),
 }: AtmosphereProps) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const pointsRef = useRef<THREE.Points>(null);
@@ -215,15 +217,15 @@ export const Atmosphere = ({
   // LOD configuration
   const lodConfig = useMemo(
     () => ({
-      minDistance: 100,
-      maxDistance: 800,
-      minParticles: 1000,
-      maxParticles: 2000,
-      minSize: 25,
-      maxSize: 150,
-      levels: 20, // Number of LOD levels
+      minDistance: planetRadius * 1.0, // Start transitioning at 1x radius
+      maxDistance: planetRadius * 8.0, // Full transition by 8x radius
+      minParticles: Math.floor(1500 * (planetRadius / 100)), // Scale particles with radius
+      maxParticles: Math.floor(3000 * (planetRadius / 100)), // Scale particles with radius
+      minSize: planetRadius * 0.25, // 20% of radius
+      maxSize: planetRadius * 1.5, // 40% of radius
+      levels: 20,
     }),
-    []
+    [planetRadius]
   );
 
   // Generate LOD levels dynamically
@@ -335,7 +337,8 @@ export const Atmosphere = ({
 
       // Calculate distance from camera to atmosphere's world position
       const distance =
-        state.camera.parent?.position.distanceTo(worldPosition) || 0;
+        (state.camera.parent?.position.distanceTo(worldPosition) ||
+          planetRadius) - planetRadius;
 
       // Determine appropriate LOD level
       let newLOD = lodLevels.findIndex((level) => distance < level.distance);
@@ -376,7 +379,7 @@ export const Atmosphere = ({
           opacity: { value: 0.35 },
           density: { value: 0.2 },
           scale: { value: 4.0 }, // Reduced for gentler pattern changes
-          color: { value: new THREE.Color(0xffffff) },
+          color: { value: atmosphereColor },
           lightDirection: { value: lightDir },
           pointTexture: { value: cloudTexture },
         }}
