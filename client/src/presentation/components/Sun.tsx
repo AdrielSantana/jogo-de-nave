@@ -1,13 +1,10 @@
 import { ProceduralSun } from "./ProceduralSun";
-import { SunGlow } from "./SunGlow";
-import { Billboard, useDetectGPU } from "@react-three/drei";
 import * as THREE from "three";
 import {
   Lensflare,
   LensflareElement,
 } from "three/examples/jsm/objects/Lensflare.js";
 import { useEffect, useRef } from "react";
-import { useThree, useLoader } from "@react-three/fiber";
 
 interface SunProps {
   radius?: number;

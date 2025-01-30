@@ -6,12 +6,9 @@ import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { Color } from "three";
 import * as THREE from "three";
 import { SolarSystem } from "./SolarSystem";
-import { useDetectGPU } from "@react-three/drei";
 
 export const GameScene = () => {
   const { initializePlayer, player } = useGameStore();
-  const GPU = useDetectGPU();
-  const isHighEnd = GPU.tier >= 2;
 
   useEffect(() => {
     initializePlayer();

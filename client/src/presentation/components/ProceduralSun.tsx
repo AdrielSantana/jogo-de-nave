@@ -138,7 +138,7 @@ export const ProceduralSun = ({
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
 
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     timeRef.current += delta;
     if (meshRef.current?.material instanceof THREE.ShaderMaterial) {
       meshRef.current.material.uniforms.iTime.value = timeRef.current;

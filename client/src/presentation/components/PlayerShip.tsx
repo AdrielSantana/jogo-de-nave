@@ -8,7 +8,7 @@ import {
   Euler,
   MathUtils,
 } from "three";
-import { PerspectiveCamera, OrbitControls } from "@react-three/drei";
+import { PerspectiveCamera } from "@react-three/drei";
 
 interface PlayerShipProps {
   player: Spaceship;
@@ -260,7 +260,7 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
     };
   }, []);
 
-  useFrame((state, delta) => {
+  useFrame((_state, _delta) => {
     if (meshRef.current) {
       // Calculate new acceleration with inertia
       const accelerationVector = new Vector3();

@@ -1,7 +1,6 @@
 import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { shaders } from "../../shaders/planetShaders";
 
 const atmosphereVertexShader = `
 attribute float size;
@@ -273,12 +272,8 @@ export const Atmosphere = ({
 
       for (let i = 0; i < count; i++) {
         const y = 1 - (i / (count - 1)) * 2; // -1 to 1
-        const radius = Math.sqrt(1 - y * y); // radius at y
 
         const theta = (2 * Math.PI * i) / goldenRatio; // golden angle increment
-
-        const x = Math.cos(theta) * radius;
-        const z = Math.sin(theta) * radius;
 
         points.push([Math.acos(y), theta]); // Store spherical coordinates
       }
