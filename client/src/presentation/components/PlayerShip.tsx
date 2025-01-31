@@ -384,7 +384,6 @@ export const PlayerShip = ({
     };
 
     // Test collision by updating player position temporarily
-    const originalPosition = player.position.clone();
     player.position.copy(testPosition);
 
     if (detectCollision(player, sun)) {
