@@ -1,22 +1,70 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, Suspense } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Spaceship } from "../../domain/entities/Spaceship";
 import {
-  Mesh,
   Vector3,
   PerspectiveCamera as ThreePerspectiveCamera,
   Euler,
   MathUtils,
+  Group,
+  DirectionalLight,
 } from "three";
-import { PerspectiveCamera } from "@react-three/drei";
+import * as THREE from "three";
+import { PerspectiveCamera, useGLTF } from "@react-three/drei";
+import { SunConfig } from "./SolarSystem";
+import { calculateLightIntensity } from "../../domain/shared/LightingUtils";
 
 interface PlayerShipProps {
   player: Spaceship;
+  startPosition: Vector3;
+  sunConfig: SunConfig;
 }
 
-export const PlayerShip = ({ player }: PlayerShipProps) => {
-  const meshRef = useRef<Mesh>(null);
+function Model() {
+  const { scene } = useGLTF("/models/space_ship/scene.gltf");
+
+  useEffect(() => {
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        // Enable shadows
+        child.castShadow = true;
+        child.receiveShadow = true;
+        // Enhance material properties for better lighting
+        if (child.material) {
+          // Increase metalness for better reflections
+          if ("metalness" in child.material) {
+            child.material.metalness = 0.8;
+          }
+          // // Adjust roughness for sharper reflections
+          // if ("roughness" in child.material) {
+          //   child.material.roughness = 0.2;
+          // }
+          // // Increase material light sensitivity
+          // child.material.envMapIntensity = 1;
+          // // Make materials more responsive to light
+          // if ("lightMapIntensity" in child.material) {
+          //   child.material.lightMapIntensity = 1;
+          // }
+          child.material.needsUpdate = true;
+        }
+      }
+    });
+  }, [scene]);
+
+  // scene.rotateY(Math.PI);
+
+  return <primitive object={scene} />;
+}
+
+export const PlayerShip = ({
+  player,
+  startPosition,
+  sunConfig,
+}: PlayerShipProps) => {
+  const meshRef = useRef<Group>(null);
   const cameraRef = useRef<ThreePerspectiveCamera>(null);
+  const lightRef = useRef<DirectionalLight>(null);
+  const lightIntensityRef = useRef(2);
 
   // Camera state
   const cameraRotation = useRef(new Euler(0, 0, 0));
@@ -30,14 +78,16 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
   const acceleration = 0.0008; // Base acceleration
   const boostMultiplier = 2.5; // Boost multiplier when right mouse button is pressed
   const maxSpeed = 0.1; // Base max speed
-  const maxBoostSpeed = 0.25; // Max speed while boosting
+  const maxBoostSpeed = 0.5; // Max speed while boosting
   const rotateAcceleration = 0.0000025;
   const maxRotationSpeed = 0.01;
   const rollAcceleration = 0.00005;
 
   // Camera settings
-  const firstPersonPosition = new Vector3(0, 0.05, 0);
-  const thirdPersonPosition = new Vector3(0, 1, 3);
+  // const firstPersonPosition = new Vector3(0, 1.2, -7); // hammerheadship
+  // const thirdPersonPosition = new Vector3(0, 10, 35); // hammerheadship
+  const firstPersonPosition = new Vector3(0, 0.3, -3); // SA-23
+  const thirdPersonPosition = new Vector3(0, 4, 10); // SA-23
 
   // Inertia and damping settings
   const dampingFactor = 0.995;
@@ -261,7 +311,7 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
   }, []);
 
   useFrame((_state, _delta) => {
-    if (meshRef.current) {
+    if (meshRef.current && lightRef.current && sunConfig) {
       // Calculate new acceleration with inertia
       const accelerationVector = new Vector3();
       const targetAcceleration = new Vector3();
@@ -332,14 +382,57 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
       // Update player state
       player.position.copy(meshRef.current.position);
       player.rotation.copy(meshRef.current.quaternion);
+
+      // Update light intensity and direction based on sun position
+      const shipPosition = meshRef.current.position;
+      const sunPosition = new Vector3(...sunConfig.position);
+
+      // Calculate direction from ship to sun
+      const directionToSun = sunPosition.clone().sub(shipPosition).normalize();
+
+      // Position light relative to ship
+      const lightDistance = 50; // Adjust based on your scene scale
+      lightRef.current.position.copy(
+        shipPosition.clone().add(directionToSun.multiplyScalar(lightDistance))
+      );
+      lightRef.current.target.position.copy(shipPosition);
+      lightRef.current.target.updateMatrixWorld();
+
+      // Update intensity based on distance
+      const intensity = calculateLightIntensity(shipPosition, sunPosition);
+      lightRef.current.intensity = intensity;
     }
   });
 
   return (
     <>
-      <mesh ref={meshRef}>
+      <directionalLight
+        ref={lightRef}
+        intensity={lightIntensityRef.current}
+        color={sunConfig.sunColor}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-far={100}
+        shadow-camera-near={0.1}
+        shadow-camera-left={-20}
+        shadow-camera-right={20}
+        shadow-camera-top={20}
+        shadow-camera-bottom={-20}
+      >
+        <object3D /> {/* Light target */}
+      </directionalLight>
+      <group
+        ref={meshRef}
+        position={startPosition}
+        castShadow
+        scale={[0.5, 0.5, 0.5]}
+      >
         <PerspectiveCamera
           ref={cameraRef}
+          isCamera
+          far={100000}
+          near={0.1}
           position={
             movement.current.thirdPerson
               ? thirdPersonPosition
@@ -348,9 +441,13 @@ export const PlayerShip = ({ player }: PlayerShipProps) => {
           makeDefault
           fov={75}
         />
-        <boxGeometry args={[1, 0.5, 2]} />
-        <meshStandardMaterial color="blue" />
-      </mesh>
+        <Suspense fallback={null}>
+          <Model />
+        </Suspense>
+      </group>
     </>
   );
 };
+
+// Pre-load the model
+useGLTF.preload("/models/space_ship/scene.gltf");

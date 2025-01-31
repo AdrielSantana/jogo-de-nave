@@ -1,8 +1,11 @@
 import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { ProceduralPlanet } from "./ProceduralPlanet";
 import { Sun } from "./Sun";
+import { PlayerShip } from "./PlayerShip";
+import { Vector3 } from "three";
+import { useGameStore } from "../../infrastructure/store/gameStore";
 
 // Define a type for planet configuration
 interface PlanetConfig {
@@ -54,6 +57,18 @@ interface PlanetConfig {
   };
 }
 
+export interface SunConfig {
+  sunColor: THREE.Color;
+  radius: number;
+  position: [number, number, number];
+}
+
+const sunConfig: SunConfig = {
+  sunColor: new THREE.Color(0.6, 0.6, 0.3), // Warm white/yellow sun color
+  radius: 80,
+  position: [0, 0, 0],
+};
+
 // Create different planet configurations
 const planets: PlanetConfig[] = [
   {
@@ -92,8 +107,8 @@ const planets: PlanetConfig[] = [
         color4: new THREE.Color(0.15, 0.35, 0.1),
         color5: new THREE.Color(0.25, 0.25, 0.25),
       },
-      atmosphereThickness: 0.5,
-      atmosphereColor: new THREE.Color(0.4, 0.6, 1.0),
+      atmosphereThickness: 0.4,
+      atmosphereColor: new THREE.Color(0.5, 0.5, 0.7),
     },
   },
   {
@@ -174,7 +189,7 @@ const planets: PlanetConfig[] = [
         color4: new THREE.Color(0.5, 0.6, 0.7),
         color5: new THREE.Color(0.4, 0.5, 0.6),
       },
-      atmosphereThickness: 0.5,
+      atmosphereThickness: 0.4,
       atmosphereColor: new THREE.Color(0.8, 0.9, 1.0),
     },
   },
@@ -214,7 +229,7 @@ const planets: PlanetConfig[] = [
         color4: new THREE.Color(0.4, 0.15, 0.0),
         color5: new THREE.Color(0.2, 0.1, 0.1),
       },
-      atmosphereThickness: 0.5,
+      atmosphereThickness: 0.4,
       atmosphereColor: new THREE.Color(0.8, 0.3, 0.1),
     },
   },
@@ -254,13 +269,17 @@ const planets: PlanetConfig[] = [
         color4: new THREE.Color(0.4, 0.3, 0.5),
         color5: new THREE.Color(0.2, 0.2, 0.3),
       },
-      atmosphereThickness: 0.7,
+      atmosphereThickness: 0.5,
       atmosphereColor: new THREE.Color(0.4, 0.6, 0.5),
     },
   },
 ];
 
-const Planet = ({ config }: { config: PlanetConfig }) => {
+const Planet = ({
+  config,
+}: {
+  config: { planet: PlanetConfig; sun: SunConfig };
+}) => {
   const groupRef = useRef<THREE.Group>(null);
   const rotationRef = useRef(0);
   // Add random initial orbital position
@@ -270,16 +289,18 @@ const Planet = ({ config }: { config: PlanetConfig }) => {
     if (groupRef.current) {
       // Update rotation tracking
       rotationRef.current =
-        (rotationRef.current + config.rotationSpeed * delta) % (2 * Math.PI);
+        (rotationRef.current + config.planet.rotationSpeed * delta) %
+        (2 * Math.PI);
 
       // Rotate planet around its axis
       groupRef.current.rotation.y = rotationRef.current;
 
       // Orbit around the center with random initial position
       const time = state.clock.getElapsedTime();
-      const orbitAngle = initialOrbitAngle.current + time * config.orbitSpeed;
-      const x = Math.cos(orbitAngle) * config.orbitRadius;
-      const z = Math.sin(orbitAngle) * config.orbitRadius;
+      const orbitAngle =
+        initialOrbitAngle.current + time * config.planet.orbitSpeed;
+      const x = Math.cos(orbitAngle) * config.planet.orbitRadius;
+      const z = Math.sin(orbitAngle) * config.planet.orbitRadius;
       groupRef.current.position.set(x, 0, z);
     }
   });
@@ -287,28 +308,40 @@ const Planet = ({ config }: { config: PlanetConfig }) => {
   return (
     <group ref={groupRef}>
       <ProceduralPlanet
-        radius={config.planetParams.radius}
-        amplitude={config.planetParams.amplitude}
-        colors={config.planetParams.colors}
-        atmosphereThickness={config.planetParams.atmosphereThickness}
-        atmosphereColor={config.planetParams.atmosphereColor}
-        hasRings={config.planetParams.hasRings}
-        ringsColor={config.planetParams.ringsColor}
+        radius={config.planet.planetParams.radius}
+        amplitude={config.planet.planetParams.amplitude}
+        colors={config.planet.planetParams.colors}
+        atmosphereThickness={config.planet.planetParams.atmosphereThickness}
+        atmosphereColor={config.planet.planetParams.atmosphereColor}
+        hasRings={config.planet.planetParams.hasRings}
+        ringsColor={config.planet.planetParams.ringsColor}
+        sunColor={config.sun.sunColor}
+        sunPosition={config.sun.position}
       />
     </group>
   );
 };
 
 export const SolarSystem = () => {
+  const { player } = useGameStore();
+
   return (
     <group>
       {/* Add the Sun at the center with reduced size */}
-      <Sun radius={80} position={[0, 0, 0]} />
+      <Sun sunConfig={sunConfig} />
 
       {/* Existing planets */}
       {planets.map((planet) => (
-        <Planet key={planet.id} config={planet} />
+        <Planet key={planet.id} config={{ planet, sun: sunConfig }} />
       ))}
+
+      {player && (
+        <PlayerShip
+          startPosition={new Vector3(400, 0, 0)}
+          sunConfig={sunConfig}
+          player={player}
+        />
+      )}
     </group>
   );
 };

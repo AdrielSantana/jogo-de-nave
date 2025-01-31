@@ -7,11 +7,14 @@ import {
 import { useEffect, useRef } from "react";
 
 interface SunProps {
-  radius?: number;
-  position?: [number, number, number];
+  sunConfig: {
+    radius: number;
+    position: [number, number, number];
+    sunColor: THREE.Color;
+  };
 }
 
-export const Sun = ({ radius = 100, position = [0, 0, 0] }: SunProps) => {
+export const Sun = ({ sunConfig }: SunProps) => {
   const lightRef = useRef<THREE.PointLight>(null);
 
   // Load lens flare textures
@@ -29,19 +32,19 @@ export const Sun = ({ radius = 100, position = [0, 0, 0] }: SunProps) => {
       const lensflare = new Lensflare();
 
       lensflare.addElement(
-        new LensflareElement(textureFlare0, 700, 0, new THREE.Color(0xffdd66))
+        new LensflareElement(textureFlare0, 700, 0, sunConfig.sunColor)
       );
       lensflare.addElement(
-        new LensflareElement(textureFlare3, 60, 0.6, new THREE.Color(0xffdd66))
+        new LensflareElement(textureFlare3, 60, 0.6, sunConfig.sunColor)
       );
       lensflare.addElement(
-        new LensflareElement(textureFlare3, 70, 0.7, new THREE.Color(0xffdd66))
+        new LensflareElement(textureFlare3, 70, 0.7, sunConfig.sunColor)
       );
       lensflare.addElement(
-        new LensflareElement(textureFlare3, 120, 0.9, new THREE.Color(0xffdd66))
+        new LensflareElement(textureFlare3, 120, 0.9, sunConfig.sunColor)
       );
       lensflare.addElement(
-        new LensflareElement(textureFlare3, 70, 1, new THREE.Color(0xffdd66))
+        new LensflareElement(textureFlare3, 70, 1, sunConfig.sunColor)
       );
 
       lightRef.current.add(lensflare);
@@ -49,14 +52,14 @@ export const Sun = ({ radius = 100, position = [0, 0, 0] }: SunProps) => {
   }, [textureFlare0, textureFlare3]);
 
   return (
-    <group position={position}>
+    <group position={sunConfig.position}>
       {/* Core sun sphere with procedural texture */}
-      <ProceduralSun radius={radius} />
+      <ProceduralSun sunColor={sunConfig.sunColor} radius={sunConfig.radius} />
 
       {/* Lens flare light source */}
       <pointLight
         ref={lightRef}
-        color={0xffffff}
+        color={sunConfig.sunColor}
         intensity={3}
         distance={3000}
         decay={1}
@@ -64,14 +67,14 @@ export const Sun = ({ radius = 100, position = [0, 0, 0] }: SunProps) => {
 
       {/* Main light for illumination */}
       <pointLight
-        color={0xffaa33}
+        color={sunConfig.sunColor}
         intensity={3}
-        distance={radius * 50}
+        distance={sunConfig.radius * 50}
         decay={2}
       />
 
       {/* Subtle ambient light */}
-      <ambientLight intensity={0.1} color={0xff9966} />
+      <ambientLight intensity={0.1} color={sunConfig.sunColor} />
     </group>
   );
 };

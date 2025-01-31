@@ -14,6 +14,7 @@ void main() {
 
 const sunFragmentShader = `
 uniform float iTime;
+uniform vec3 sunColor;
 varying vec3 vPosition;
 varying vec3 vNormal;
 
@@ -76,10 +77,10 @@ void main() {
     float f = fbm(p * 4.0);
     f = smoothstep(0.0, 1.0, f);
     
-    // Create base sun color
-    vec3 baseColor = vec3(0.9, 0.4, 0.1);
-    vec3 brightColor = vec3(1.0, 0.8, 0.3);
-    vec3 darkColor = vec3(0.8, 0.2, 0.0);
+    // Use sunColor uniform instead of hardcoded values
+    vec3 baseColor = sunColor;
+    vec3 brightColor = sunColor * vec3(1.1, 1.1, 1.0);
+    vec3 darkColor = sunColor * vec3(0.8, 0.8, 0.7);
     
     // Mix colors based on noise
     vec3 col = mix(darkColor, brightColor, f);
@@ -108,12 +109,12 @@ void main() {
 
 interface ProceduralSunProps {
   radius?: number;
-  position?: [number, number, number];
+  sunColor: THREE.Color;
 }
 
 export const ProceduralSun = ({
+  sunColor,
   radius = 100,
-  position = [0, 0, 0],
 }: ProceduralSunProps) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
@@ -126,12 +127,13 @@ export const ProceduralSun = ({
   });
 
   const sunParams = {
+    sunColor: { value: sunColor },
     iTime: { value: 0 },
     iResolution: { value: new THREE.Vector2(1024, 1024) },
   };
 
   return (
-    <mesh ref={meshRef} position={position}>
+    <mesh ref={meshRef}>
       <sphereGeometry args={[radius, 64, 64]} />
       <shaderMaterial
         vertexShader={sunVertexShader}

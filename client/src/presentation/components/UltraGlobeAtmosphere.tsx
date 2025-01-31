@@ -1,6 +1,7 @@
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
+import { calculateLightIntensity } from "../../domain/shared/LightingUtils";
 
 interface UltraGlobeAtmosphereProps {
   radius?: number;
@@ -13,34 +14,37 @@ interface UltraGlobeAtmosphereProps {
   atmosphereColor?: THREE.Color;
   ringsColor?: THREE.Color;
   weatherChangeSpeed?: number; // Speed of weather changes
+  sunColor: THREE.Color;
 }
 
 export const UltraGlobeAtmosphere = ({
   radius = 200,
   atmosphereDensity = 1.0,
-  sunPosition = new THREE.Vector3(1, 1, 1).normalize(),
+  sunPosition = new THREE.Vector3(1, 0.5, 0).normalize(),
   hasRings = true,
-  cloudCoverage = 0.5,
-  cloudDensity = 0.1,
+  cloudCoverage = 0.7,
+  cloudDensity = 0.3,
   windSpeed = 0.07,
   atmosphereColor = new THREE.Color(0.6, 0.8, 1.0),
   ringsColor = new THREE.Color(0.6, 0.6, 0.6),
-  weatherChangeSpeed = 0.1, // Default weather change speed
+  weatherChangeSpeed = 0.1,
+  sunColor,
 }: UltraGlobeAtmosphereProps) => {
   const atmosphereRef = useRef<THREE.Mesh>(null);
   const cloudsRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const cloudsMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const worldPosition = new THREE.Vector3();
 
-  // Weather state management
+  // Weather state management with increased coverage and density
   const weatherRef = useRef({
     time: 0,
     currentPhase: 0,
     phases: [
-      { coverage: 0.2, density: 0.1, duration: 20 }, // Clear sky
-      { coverage: 0.5, density: 0.3, duration: 15 }, // Partly cloudy
-      { coverage: 0.7, density: 0.5, duration: 25 }, // Cloudy
-      { coverage: 0.9, density: 0.8, duration: 10 }, // Storm
+      { coverage: 0.4, density: 0.3, duration: 20 }, // Clear sky (more clouds)
+      { coverage: 0.7, density: 0.5, duration: 15 }, // Partly cloudy (denser)
+      { coverage: 0.8, density: 0.7, duration: 25 }, // Cloudy (more coverage)
+      { coverage: 0.9, density: 0.9, duration: 10 }, // Storm (maximum coverage)
     ],
   });
 
@@ -57,14 +61,14 @@ export const UltraGlobeAtmosphere = ({
     };
   }, []);
 
-  // Atmosphere shader
+  // Atmosphere shader with fixed light direction
   const atmosphereShader = {
     vertexShader: `
       varying vec3 vNormal;
       varying vec3 vWorldPosition;
       
       void main() {
-        vNormal = normalize(normalMatrix * normal);
+        vNormal = normalize(normal);
         vec4 worldPosition = modelMatrix * vec4(position, 1.0);
         vWorldPosition = worldPosition.xyz;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -74,31 +78,37 @@ export const UltraGlobeAtmosphere = ({
       uniform vec3 sunPosition;
       uniform float atmosphereDensity;
       uniform vec3 atmosphereColor;
+      uniform float lightIntensity;
       
       varying vec3 vNormal;
       varying vec3 vWorldPosition;
       
       void main() {
-        vec3 worldNormal = normalize(vNormal);
+        vec3 normal = normalize(vNormal);
         vec3 lightDir = normalize(sunPosition);
         
-        float intensity = pow(1.0 - abs(dot(worldNormal, lightDir)), 2.0) * atmosphereDensity;
-        gl_FragColor = vec4(atmosphereColor, intensity);
+        float NdotL = dot(normal, lightDir);
+        // Even softer edge transition
+        float shadowFalloff = pow(1.0 - abs(NdotL), 4.0);
+        float intensity = shadowFalloff * atmosphereDensity * lightIntensity * 0.4; // Further reduced intensity
+        
+        float darkSide = pow(max(0.0, -NdotL), 4.0);
+        intensity *= (1.0 - darkSide * 0.99); // Stronger dark side effect
+        
+        gl_FragColor = vec4(atmosphereColor, intensity * 0.6); // Further reduced final alpha
       }
     `,
   };
 
-  // Cloud shader
+  // Cloud shader with fixed light direction
   const cloudShader = {
     vertexShader: `
-      varying vec2 vUv;
       varying vec3 vNormal;
       varying vec3 vPosition;
       
       void main() {
-        vUv = uv;
         vPosition = position;
-        vNormal = normalize(normalMatrix * normal);
+        vNormal = normalize(normal); // Use local space normal directly
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
@@ -107,150 +117,110 @@ export const UltraGlobeAtmosphere = ({
       uniform float coverage;
       uniform float density;
       uniform vec3 sunPosition;
-      
-      varying vec2 vUv;
+      uniform vec3 sunColor;
+      uniform vec3 atmosphereColor;
+      uniform float atmosphereDensity;
+      uniform float lightIntensity;
       varying vec3 vNormal;
       varying vec3 vPosition;
-      
-      // Improved noise functions
-      vec2 hash2(vec2 p) {
-        p = vec2(
-          dot(p, vec2(127.1, 311.7)),
-          dot(p, vec2(269.5, 183.3))
+
+      // Hash function for noise
+      float hash(vec3 p) {
+        p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+        p += dot(p, p.yxz + 33.33);
+        return fract((p.x + p.y) * p.z);
+      }
+
+      // 3D noise
+      float noise(vec3 p) {
+        vec3 i = floor(p);
+        vec3 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        
+        float a = hash(i);
+        float b = hash(i + vec3(1.0, 0.0, 0.0));
+        float c = hash(i + vec3(0.0, 1.0, 0.0));
+        float d = hash(i + vec3(1.0, 1.0, 0.0));
+        float e = hash(i + vec3(0.0, 0.0, 1.0));
+        float f1 = hash(i + vec3(1.0, 0.0, 1.0));
+        float g = hash(i + vec3(0.0, 1.0, 1.0));
+        float h = hash(i + vec3(1.0, 1.0, 1.0));
+
+        return mix(
+          mix(mix(a, b, f.x), mix(c, d, f.x), f.y),
+          mix(mix(e, f1, f.x), mix(g, h, f.x), f.y),
+          f.z
         );
-        return fract(sin(p) * 43758.5453123);
       }
-      
-      float voronoi(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
+
+      // FBM (Fractal Brownian Motion)
+      float fbm(vec3 p) {
+        float value = 0.0;
+        float amplitude = 0.5;
+        float frequency = 1.0;
         
-        float minDist = 1.0;
-        
-        for(int y = -1; y <= 1; y++) {
-          for(int x = -1; x <= 1; x++) {
-            vec2 neighbor = vec2(float(x), float(y));
-            vec2 point = hash2(i + neighbor);
-            vec2 diff = neighbor + point - f;
-            float dist = length(diff);
-            minDist = min(minDist, dist);
-          }
+        for(int i = 0; i < 5; i++) {
+          value += amplitude * noise(p * frequency);
+          amplitude *= 0.5;
+          frequency *= 2.0;
+          p = p * 1.1 + vec3(1.7, 9.2, 4.1);
         }
-        return minDist;
-      }
-      
-      float fbm(vec2 p) {
-        float sum = 0.0;
-        float amp = 1.0;
-        float freq = 1.0;
         
-        // More octaves for more detail
-        for(int i = 0; i < 6; i++) {
-          float n = voronoi(p * freq);
-          sum += n * amp;
-          amp *= 0.5;
-          freq *= 2.0;
-          p += vec2(3.123, 2.456); // Add variation to each octave
-        }
-        return sum;
+        return value;
       }
-      
-      float cloudPattern(vec2 p) {
-        // Base noise pattern
-        float n1 = fbm(p * 2.0 + time * 0.1);
-        float n2 = fbm(p * 4.0 - time * 0.05);
-        float n3 = fbm(p * 8.0 + time * 0.02);
+
+      // Cloud pattern generation
+      float cloudPattern(vec3 p) {
+        p += time * 0.1;
+        float n1 = fbm(p * 2.0);
+        float n2 = fbm(p * 4.0 - vec3(time * 0.2));
+        float n3 = fbm(p * 8.0 + vec3(time * 0.1));
         
-        // Combine different frequencies
         float pattern = n1 * 0.5 + n2 * 0.25 + n3 * 0.25;
-        
-        // Create more interesting shapes
         float clouds = smoothstep(coverage, coverage + density, pattern);
         
-        // Add some high-frequency detail
-        float detail = fbm(p * 16.0 + vec2(time * 0.03));
-        clouds *= 0.9 + detail * 0.1;
+        float detail = fbm(p * 16.0 + vec3(time * 0.05));
+        clouds *= 0.8 + detail * 0.2;
         
-        // Create cloud layers
-        float layer1 = smoothstep(0.1, 0.3, clouds);
-        float layer2 = smoothstep(0.4, 0.6, clouds);
-        float layer3 = smoothstep(0.7, 0.9, clouds);
-        
-        return mix(layer1 * 0.3, mix(layer2 * 0.6, layer3, 0.5), 0.5);
+        return clouds;
       }
       
       void main() {
-        // Create spherical UV coordinates
-        vec2 sphereUv = vec2(
-          atan(vPosition.x, vPosition.z) / (2.0 * 3.14159) + 0.5,
-          asin(vPosition.y / length(vPosition)) / 3.14159 + 0.5
-        );
+        vec3 nPos = normalize(vPosition);
+        float clouds = cloudPattern(nPos * 4.0);
         
-        // Add some rotation to the base coordinates
-        float rotation = time * 0.02;
-        vec2 rotatedUv = vec2(
-          sphereUv.x * cos(rotation) - sphereUv.y * sin(rotation),
-          sphereUv.x * sin(rotation) + sphereUv.y * cos(rotation)
-        );
-        
-        // Generate cloud pattern
-        float clouds = cloudPattern(rotatedUv * 4.0);
-        
-        // Lighting
+        vec3 normal = normalize(vNormal);
         vec3 lightDir = normalize(sunPosition);
-        float light = max(0.2, dot(vNormal, lightDir));
+        float NdotL = dot(normal, lightDir);
         
-        // Add some rim lighting
-        vec3 viewDir = normalize(cameraPosition - vPosition);
-        float rim = 1.0 - max(0.0, dot(viewDir, vNormal));
-        rim = pow(rim, 3.0);
+        float directLight = smoothstep(-0.2, 0.5, NdotL) * lightIntensity * 0.6; // Reduced more
+        float ambient = 0.015; // Further reduced ambient
         
-        // Combine lighting effects
-        float finalLight = light + rim * 0.3;
+        float totalLight = directLight + ambient;
         
-        // Cloud color with depth variation
-        vec3 cloudColor = mix(
-          vec3(0.95, 0.95, 0.95), // Base color
-          vec3(0.8, 0.8, 0.85),   // Shadow color
-          clouds * 0.5
-        );
+        vec3 blendedLight = mix(sunColor, atmosphereColor, atmosphereDensity);
+        vec3 sunlitColor = blendedLight * 0.7; // Further reduced brightness
+        vec3 shadowColor = vec3(0.002, 0.002, 0.005); // Even darker shadow
+        vec3 cloudColor = mix(shadowColor, sunlitColor, totalLight);
         
-        gl_FragColor = vec4(cloudColor * finalLight, clouds * smoothstep(0.0, 0.2, clouds));
+        float shadowFade = smoothstep(-0.5, 0.0, NdotL);
+        float darkSide = pow(max(0.0, -NdotL), 4.0);
+        float finalAlpha = clouds * smoothstep(0.0, 0.2, clouds) * mix(0.03, 0.4, shadowFade);
+        finalAlpha *= (1.0 - darkSide * 0.98);
+        
+        gl_FragColor = vec4(cloudColor, finalAlpha);
       }
     `,
   };
 
-  // Update light direction in object space
-  const updateLightDirection = useCallback(() => {
-    if (
-      atmosphereRef.current &&
-      materialRef.current &&
-      cloudsMaterialRef.current
-    ) {
-      atmosphereRef.current.updateWorldMatrix(true, false);
-      const objectSpaceLightDir = sunPosition
-        .clone()
-        .applyMatrix4(atmosphereRef.current.matrixWorld.invert())
-        .normalize();
-
-      materialRef.current.uniforms.sunPosition.value.copy(objectSpaceLightDir);
-      cloudsMaterialRef.current.uniforms.sunPosition.value.copy(
-        objectSpaceLightDir
-      );
-    }
-  }, [sunPosition]);
-
-  useEffect(() => {
-    if (materialRef.current) {
-      materialRef.current.uniforms.atmosphereColor.value = atmosphereColor;
-      materialRef.current.uniforms.atmosphereDensity.value = atmosphereDensity;
-    }
-
-    updateLightDirection();
-  }, [atmosphereDensity, atmosphereColor, updateLightDirection]);
-
+  // Update every frame
   useFrame((state) => {
     if (cloudsMaterialRef.current) {
+      // Only update time for cloud movement
+      cloudsMaterialRef.current.uniforms.time.value =
+        state.clock.getElapsedTime() * windSpeed;
+
+      // Weather phase calculations
       const deltaTime = state.clock.getElapsedTime() - weatherRef.current.time;
       weatherRef.current.time = state.clock.getElapsedTime();
 
@@ -284,7 +254,7 @@ export const UltraGlobeAtmosphere = ({
 
       // Add some noise to the transition
       const noiseTime = state.clock.getElapsedTime() * 0.1;
-      const noiseValue = noise.get(noiseTime) * 0.2; // 20% variation
+      const noiseValue = noise.get(noiseTime) * 0.2;
 
       // Interpolate between phases
       const currentPhaseData = weatherRef.current.phases[currentPhase];
@@ -308,20 +278,31 @@ export const UltraGlobeAtmosphere = ({
       cloudsMaterialRef.current.uniforms.coverage.value =
         1.0 - THREE.MathUtils.clamp(lerpedCoverage, 0, 1);
       cloudsMaterialRef.current.uniforms.density.value = THREE.MathUtils.clamp(
-        lerpedDensity,
+        lerpedDensity * 1.2, // Keep the density multiplier
         0,
         1
       );
-      cloudsMaterialRef.current.uniforms.time.value =
-        state.clock.getElapsedTime() * windSpeed;
-
-      // Adjust wind speed based on cloud density
-      const currentWindSpeed = windSpeed * (1 + lerpedDensity);
-      cloudsMaterialRef.current.uniforms.time.value =
-        state.clock.getElapsedTime() * currentWindSpeed;
     }
 
-    updateLightDirection();
+    // Calculate distance-based light intensity
+    if (atmosphereRef.current) {
+      atmosphereRef.current.getWorldPosition(worldPosition);
+      const intensity = calculateLightIntensity(
+        worldPosition,
+        sunPosition,
+        "atmosphere"
+      );
+
+      // Update atmosphere material
+      if (materialRef.current) {
+        materialRef.current.uniforms.lightIntensity.value = intensity;
+      }
+
+      // Update cloud material
+      if (cloudsMaterialRef.current) {
+        cloudsMaterialRef.current.uniforms.lightIntensity.value = intensity;
+      }
+    }
   });
 
   return (
@@ -339,12 +320,13 @@ export const UltraGlobeAtmosphere = ({
             sunPosition: { value: sunPosition },
             atmosphereDensity: { value: atmosphereDensity },
             atmosphereColor: { value: atmosphereColor },
+            lightIntensity: { value: 1.0 },
           }}
         />
       </mesh>
 
-      {/* Cloud layer */}
-      <mesh ref={cloudsRef} scale={[1.1, 1.1, 1.1]}>
+      {/* Cloud layer with adjusted scale for more visibility */}
+      <mesh ref={cloudsRef} scale={[1.15, 1.15, 1.15]}>
         <sphereGeometry args={[radius, 64, 64]} />
         <shaderMaterial
           ref={cloudsMaterialRef}
@@ -352,11 +334,16 @@ export const UltraGlobeAtmosphere = ({
           fragmentShader={cloudShader.fragmentShader}
           transparent
           depthWrite={false}
+          blending={THREE.AdditiveBlending}
           uniforms={{
             time: { value: 0 },
             coverage: { value: 1.0 - cloudCoverage },
-            density: { value: cloudDensity },
+            density: { value: cloudDensity * 1.2 },
             sunPosition: { value: sunPosition },
+            sunColor: { value: sunColor },
+            atmosphereColor: { value: atmosphereColor },
+            atmosphereDensity: { value: atmosphereDensity },
+            lightIntensity: { value: 1.0 },
           }}
         />
       </mesh>

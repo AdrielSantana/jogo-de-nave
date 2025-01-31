@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { Vector3, Quaternion } from "three";
 import { Spaceship } from "../../domain/entities/Spaceship";
+import * as THREE from "three";
 
 interface GameState {
   player: Spaceship | null;
@@ -22,8 +23,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   initializePlayer: () => {
     // Start player far from the sun, near the earth-like planet
     const newPlayer = new Spaceship({
-      position: new Vector3(500, 100, 500), // Increased Y and Z coordinates for safer distance
-      rotation: new Quaternion(),
+      position: new Vector3(800, 200, 800), // Much further out for safety
+      rotation: new Quaternion().setFromEuler(new THREE.Euler(-0.2, 0.5, 0)), // Slight angle to see the system
       velocity: new Vector3(0, 0, 0),
       health: 100,
       id: "player",

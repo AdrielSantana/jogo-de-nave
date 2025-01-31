@@ -2,6 +2,7 @@ import { useRef, useMemo, useEffect, useCallback } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { UltraGlobeAtmosphere } from "./UltraGlobeAtmosphere";
+import { calculateLightIntensity } from "../../domain/shared/LightingUtils";
 
 const noiseFunctions = `
 const float PI = 3.14159265;
@@ -139,6 +140,8 @@ interface ProceduralPlanetProps {
   atmosphereColor?: THREE.Color;
   hasRings?: boolean;
   ringsColor?: THREE.Color;
+  sunColor: THREE.Color;
+  sunPosition: [number, number, number];
 }
 
 export const ProceduralPlanet = ({
@@ -155,13 +158,18 @@ export const ProceduralPlanet = ({
   hasRings = false,
   ringsColor = new THREE.Color(0.6, 0.6, 0.6),
   atmosphereColor = new THREE.Color(0.6, 0.8, 1.0),
+  sunColor,
+  sunPosition,
 }: ProceduralPlanetProps) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const worldPosition = new THREE.Vector3();
   const matrixRef = useRef(new THREE.Matrix4());
 
   // Fixed light direction in world space
-  const lightDir = useMemo(() => new THREE.Vector3(0, 0, 0).normalize(), []);
+  const lightDir = useMemo(
+    () => new THREE.Vector3(...sunPosition).normalize(),
+    [sunPosition]
+  );
 
   // Matrix to transform light direction from world to object space
   const updateLightDirection = useCallback(() => {
@@ -260,12 +268,13 @@ export const ProceduralPlanet = ({
       persistence: { value: 0.52 },
       lacunarity: { value: 2.2 },
       octaves: { value: 12 },
-      ambientIntensity: { value: 0.03 },
-      diffuseIntensity: { value: 1.2 },
+      ambientIntensity: { value: 0.01 },
+      diffuseIntensity: { value: 1.4 },
       specularIntensity: { value: 1 },
       shininess: { value: 10.0 },
       lightDirection: { value: lightDir },
-      lightColor: { value: new THREE.Color(1, 1, 1) },
+      lightColor: { value: sunColor },
+      lightIntensity: { value: 1.0 },
       bumpStrength: { value: 1.0 },
       bumpOffset: { value: 0.002 },
       color1: { value: colors.color1 }, // Deep ocean
@@ -281,9 +290,11 @@ export const ProceduralPlanet = ({
       blend23: { value: 0.03 },
       blend34: { value: 0.15 },
       blend45: { value: 0.25 }, // Wider blend for smoother mountain transition
-      atmosphereBlend: { value: 0.0 },
+      atmosphereBlend: { value: 1 },
+      atmosphereColor: { value: atmosphereColor },
+      atmosphereDensity: { value: atmosphereThickness },
     }),
-    [radius, amplitude, lightDir]
+    [radius, amplitude, lightDir, atmosphereColor, atmosphereThickness]
   );
 
   useFrame((state) => {
@@ -303,17 +314,32 @@ export const ProceduralPlanet = ({
         meshRef.current.geometry = lodGeometries[newLOD];
         currentLOD.current = newLOD;
 
-        // Update shader parameters based on LOD
         planetParams.bumpStrength.value = lodLevels[newLOD].bumpStrength;
         planetParams.amplitude.value = lodLevels[newLOD].amplitude;
 
-        // Calculate atmosphere blend based on distance
+        // Modify atmosphere blend calculation
         const maxDistance = lodLevels[lodLevels.length - 2].distance;
         const blend = Math.max(
           0,
-          Math.min(0.8, (distance - lodLevels[0].distance) / maxDistance) // Cap blend at 0.8 to maintain visibility
+          Math.min(0.4, (distance - lodLevels[0].distance) / maxDistance) // Reduced from 0.8 to 0.4
         );
-        planetParams.atmosphereBlend.value = blend;
+        planetParams.atmosphereBlend.value = blend * 0.5; // Reduce overall blend effect
+      }
+
+      // Update light direction
+      updateLightDirection();
+
+      // Calculate distance-based light intensity
+      const sunPos = new THREE.Vector3(...sunPosition);
+      const intensity = calculateLightIntensity(
+        worldPosition,
+        sunPos,
+        "planet"
+      );
+
+      // Update shader uniforms
+      if (meshRef.current.material instanceof THREE.ShaderMaterial) {
+        meshRef.current.material.uniforms.lightIntensity.value = intensity;
       }
     }
   });
@@ -402,7 +428,9 @@ export const ProceduralPlanet = ({
             uniform float shininess;
             uniform vec3 lightDirection;
             uniform vec3 lightColor;
-            uniform float atmosphereBlend;
+            uniform vec3 atmosphereColor;
+            uniform float atmosphereDensity;
+            uniform float lightIntensity;
 
             varying vec3 fragPosition;
             varying vec3 fragNormal;
@@ -459,11 +487,7 @@ export const ProceduralPlanet = ({
               vec3 V = normalize(cameraPosition - pos);
               vec3 R = normalize(reflect(L, N));
 
-              float diffuse = diffuseIntensity * max(0.0, dot(N, -L));
-              float specularFalloff = clamp((transition3 - h) / transition3, 0.0, 1.0);
-              float specular = max(0.0, specularFalloff * specularIntensity * pow(dot(V, R), shininess));
-              float light = ambientIntensity + diffuse + specular;
-
+              // Calculate base terrain color without lighting first
               vec3 color12 = mix(
                 color1, 
                 color2, 
@@ -484,11 +508,32 @@ export const ProceduralPlanet = ({
                 color5, 
                 smoothstep(transition5 - blend45, transition5 + blend45, h));
 
-              // Blend with atmosphere color at distance
-              vec3 atmosphereColor = vec3(0.6, 0.8, 1.0);
-              vec3 blendedColor = mix(finalColor, atmosphereColor, vAtmosphereBlend);
+              // Calculate lighting with stronger shadows
+              float diffuse = diffuseIntensity * max(0.0, dot(N, -L)) * lightIntensity;
+              float specularFalloff = clamp((transition3 - h) / transition3, 0.0, 1.0);
+              float specular = max(0.0, specularFalloff * specularIntensity * pow(dot(V, R), shininess) * lightIntensity);
               
-              gl_FragColor = vec4(light * blendedColor * lightColor, 1.0);
+              // Add stronger shadow falloff
+              float shadowFalloff = pow(max(0.0, dot(N, -L)), 1.5); // Added exponential falloff
+              float light = ambientIntensity + (diffuse + specular) * shadowFalloff;
+
+              // Blend the atmosphere and sun colors first
+              vec3 blendedLight = mix(lightColor, atmosphereColor, atmosphereDensity);
+              
+              // Apply the blended light to the terrain
+              vec3 litColor = finalColor * blendedLight * light;
+              
+              // Modify the final atmosphere blend to preserve darkness
+              vec3 darkColor = finalColor * 0.001; // Very dark base color
+              litColor = mix(darkColor, litColor, shadowFalloff);
+              
+              // Adjust atmosphere blend to preserve darkness
+              float darkPreservation = (1.0 - shadowFalloff) * 0.95; // Preserve darkness in shadows
+              float adjustedAtmosphereBlend = vAtmosphereBlend * (1.0 - darkPreservation);
+              
+              vec3 finalBlendedColor = mix(litColor, blendedLight, adjustedAtmosphereBlend);
+              
+              gl_FragColor = vec4(finalBlendedColor, 1.0);
             }
           `}
           uniforms={planetParams}
@@ -498,13 +543,12 @@ export const ProceduralPlanet = ({
         radius={radius}
         atmosphereDensity={atmosphereThickness}
         sunPosition={lightDir}
-        hasRings={hasRings}
-        cloudCoverage={0.5}
-        cloudDensity={0.5}
-        windSpeed={0.2}
-        weatherChangeSpeed={0.05}
-        ringsColor={ringsColor}
+        sunColor={sunColor}
         atmosphereColor={atmosphereColor}
+        hasRings={hasRings}
+        windSpeed={0.1}
+        weatherChangeSpeed={0.5}
+        ringsColor={ringsColor}
       />
     </>
   );
