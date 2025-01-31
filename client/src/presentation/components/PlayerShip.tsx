@@ -13,11 +13,17 @@ import * as THREE from "three";
 import { PerspectiveCamera, useGLTF } from "@react-three/drei";
 import { SunConfig } from "./SolarSystem";
 import { calculateLightIntensity } from "../../domain/shared/LightingUtils";
+import {
+  CelestialBody,
+  detectCollision,
+  handleCollision,
+} from "../../domain/shared/CollisionUtils";
 
 interface PlayerShipProps {
   player: Spaceship;
   startPosition: Vector3;
   sunConfig: SunConfig;
+  planets: { position: Vector3; radius: number }[];
 }
 
 function Model() {
@@ -60,6 +66,7 @@ export const PlayerShip = ({
   player,
   startPosition,
   sunConfig,
+  planets,
 }: PlayerShipProps) => {
   const meshRef = useRef<Group>(null);
   const cameraRef = useRef<ThreePerspectiveCamera>(null);
@@ -311,97 +318,177 @@ export const PlayerShip = ({
   }, []);
 
   useFrame((_state, _delta) => {
-    if (meshRef.current && lightRef.current && sunConfig) {
-      // Calculate new acceleration with inertia
-      const accelerationVector = new Vector3();
-      const targetAcceleration = new Vector3();
-      const currentAcceleration = isBoostingRef.current
-        ? acceleration * boostMultiplier
-        : acceleration;
-      const currentMaxSpeed = isBoostingRef.current ? maxBoostSpeed : maxSpeed;
+    const mesh = meshRef.current;
+    const light = lightRef.current;
+    if (!mesh || !light || !sunConfig) return;
 
-      if (movement.current.forward)
-        targetAcceleration.z -= currentAcceleration * principalThrusterStrength;
-      if (movement.current.backward)
-        targetAcceleration.z += currentAcceleration * sideThrusterStrength;
-      if (movement.current.left)
-        targetAcceleration.x -= currentAcceleration * sideThrusterStrength;
-      if (movement.current.right)
-        targetAcceleration.x += currentAcceleration * sideThrusterStrength;
-      if (movement.current.up)
-        targetAcceleration.y += currentAcceleration * sideThrusterStrength;
-      if (movement.current.down)
-        targetAcceleration.y -= currentAcceleration * sideThrusterStrength;
+    // Calculate new acceleration with inertia
+    const accelerationVector = new Vector3();
+    const targetAcceleration = new Vector3();
+    const currentAcceleration = isBoostingRef.current
+      ? acceleration * boostMultiplier
+      : acceleration;
+    const currentMaxSpeed = isBoostingRef.current ? maxBoostSpeed : maxSpeed;
 
-      // Blend new acceleration with previous acceleration (inertia)
-      accelerationVector
-        .copy(targetAcceleration)
-        .multiplyScalar(1 - inertiaFactor)
-        .add(lastAcceleration.current.multiplyScalar(inertiaFactor));
+    if (movement.current.forward)
+      targetAcceleration.z -= currentAcceleration * principalThrusterStrength;
+    if (movement.current.backward)
+      targetAcceleration.z += currentAcceleration * sideThrusterStrength;
+    if (movement.current.left)
+      targetAcceleration.x -= currentAcceleration * sideThrusterStrength;
+    if (movement.current.right)
+      targetAcceleration.x += currentAcceleration * sideThrusterStrength;
+    if (movement.current.up)
+      targetAcceleration.y += currentAcceleration * sideThrusterStrength;
+    if (movement.current.down)
+      targetAcceleration.y -= currentAcceleration * sideThrusterStrength;
 
-      // Transform to world space and apply
-      accelerationVector.applyQuaternion(meshRef.current.quaternion);
-      velocity.current.add(accelerationVector);
+    // Blend new acceleration with previous acceleration (inertia)
+    accelerationVector
+      .copy(targetAcceleration)
+      .multiplyScalar(1 - inertiaFactor)
+      .add(lastAcceleration.current.multiplyScalar(inertiaFactor));
 
-      // Update last acceleration for next frame
-      lastAcceleration.current.copy(accelerationVector);
+    // Transform to world space and apply
+    accelerationVector.applyQuaternion(mesh.quaternion);
+    velocity.current.add(accelerationVector);
 
-      // Apply damping
-      velocity.current.multiplyScalar(dampingFactor);
+    // Update last acceleration for next frame
+    lastAcceleration.current.copy(accelerationVector);
 
-      // Limit speed based on boost state
-      if (velocity.current.length() > currentMaxSpeed) {
-        velocity.current.normalize().multiplyScalar(currentMaxSpeed);
-      }
+    // Apply damping
+    velocity.current.multiplyScalar(dampingFactor);
 
-      // Update position
-      meshRef.current.position.add(velocity.current);
-
-      // Handle roll with inertia
-      if (movement.current.rolling) {
-        const rollForce = rollAcceleration * movement.current.rollDirection;
-        rotationVelocity.current.z +=
-          rollForce +
-          lastRotationAcceleration.current.z * rotationInertiaFactor;
-        lastRotationAcceleration.current.z = rollForce;
-      }
-
-      // Apply rotation damping
-      rotationVelocity.current.multiplyScalar(rotationDamping);
-
-      // Limit rotation speed
-      if (rotationVelocity.current.length() > maxRotationSpeed) {
-        rotationVelocity.current.normalize().multiplyScalar(maxRotationSpeed);
-      }
-
-      // Apply rotations in order
-      meshRef.current.rotateY(rotationVelocity.current.y);
-      meshRef.current.rotateX(rotationVelocity.current.x);
-      meshRef.current.rotateZ(rotationVelocity.current.z);
-
-      // Update player state
-      player.position.copy(meshRef.current.position);
-      player.rotation.copy(meshRef.current.quaternion);
-
-      // Update light intensity and direction based on sun position
-      const shipPosition = meshRef.current.position;
-      const sunPosition = new Vector3(...sunConfig.position);
-
-      // Calculate direction from ship to sun
-      const directionToSun = sunPosition.clone().sub(shipPosition).normalize();
-
-      // Position light relative to ship
-      const lightDistance = 50; // Adjust based on your scene scale
-      lightRef.current.position.copy(
-        shipPosition.clone().add(directionToSun.multiplyScalar(lightDistance))
-      );
-      lightRef.current.target.position.copy(shipPosition);
-      lightRef.current.target.updateMatrixWorld();
-
-      // Update intensity based on distance
-      const intensity = calculateLightIntensity(shipPosition, sunPosition);
-      lightRef.current.intensity = intensity;
+    // Limit speed based on boost state
+    if (velocity.current.length() > currentMaxSpeed) {
+      velocity.current.normalize().multiplyScalar(currentMaxSpeed);
     }
+
+    // Calculate next position
+    const nextPosition = mesh.position.clone().add(velocity.current);
+
+    // Update player position to match current mesh position
+    player.position.copy(mesh.position);
+
+    // Test collision at next position
+    const testPosition = nextPosition.clone();
+
+    // Check for potential collisions at next position
+    let willCollide = false;
+
+    // Check sun collision
+    const sun: CelestialBody = {
+      position: new Vector3(...sunConfig.position),
+      radius: sunConfig.radius,
+      type: "sun",
+    };
+
+    // Test collision by updating player position temporarily
+    const originalPosition = player.position.clone();
+    player.position.copy(testPosition);
+
+    if (detectCollision(player, sun)) {
+      willCollide = true;
+      const { newVelocity, damage } = handleCollision(
+        player,
+        sun,
+        velocity.current
+      );
+      velocity.current.copy(newVelocity);
+      player.takeDamage(damage);
+
+      // Move ship out of collision
+      const escapeVector = new Vector3()
+        .subVectors(player.position, sun.position)
+        .normalize()
+        .multiplyScalar(sun.radius + 3);
+      mesh.position.copy(sun.position).add(escapeVector);
+      player.position.copy(mesh.position);
+    }
+
+    // Check planet collisions
+    planets.forEach((planetData) => {
+      const planet: CelestialBody = {
+        position: planetData.position,
+        radius: planetData.radius,
+        type: "planet",
+      };
+
+      // Update test position for each planet check
+      player.position.copy(testPosition);
+
+      if (detectCollision(player, planet)) {
+        willCollide = true;
+        const { newVelocity, damage } = handleCollision(
+          player,
+          planet,
+          velocity.current
+        );
+        velocity.current.copy(newVelocity);
+        player.takeDamage(damage);
+
+        // Move ship out of collision
+        const escapeVector = new Vector3()
+          .subVectors(player.position, planet.position)
+          .normalize()
+          .multiplyScalar(planet.radius + 3);
+        mesh.position.copy(planet.position).add(escapeVector);
+        player.position.copy(mesh.position);
+      }
+    });
+
+    // Update position based on collision status
+    if (!willCollide) {
+      mesh.position.add(velocity.current);
+      player.position.copy(mesh.position);
+    } else {
+      // If there was a collision, make sure player position and mesh position are in sync
+      player.position.copy(mesh.position);
+    }
+
+    // Handle roll with inertia
+    if (movement.current.rolling) {
+      const rollForce = rollAcceleration * movement.current.rollDirection;
+      rotationVelocity.current.z +=
+        rollForce + lastRotationAcceleration.current.z * rotationInertiaFactor;
+      lastRotationAcceleration.current.z = rollForce;
+    }
+
+    // Apply rotation damping
+    rotationVelocity.current.multiplyScalar(rotationDamping);
+
+    // Limit rotation speed
+    if (rotationVelocity.current.length() > maxRotationSpeed) {
+      rotationVelocity.current.normalize().multiplyScalar(maxRotationSpeed);
+    }
+
+    // Apply rotations in order
+    mesh.rotateY(rotationVelocity.current.y);
+    mesh.rotateX(rotationVelocity.current.x);
+    mesh.rotateZ(rotationVelocity.current.z);
+
+    // Update player state
+    player.position.copy(mesh.position);
+    player.rotation.copy(mesh.quaternion);
+
+    // Update light intensity and direction based on sun position
+    const shipPosition = mesh.position;
+    const sunPosition = new Vector3(...sunConfig.position);
+
+    // Calculate direction from ship to sun
+    const directionToSun = sunPosition.clone().sub(shipPosition).normalize();
+
+    // Position light relative to ship
+    const lightDistance = 50; // Adjust based on your scene scale
+    light.position.copy(
+      shipPosition.clone().add(directionToSun.multiplyScalar(lightDistance))
+    );
+    light.target.position.copy(shipPosition);
+    light.target.updateMatrixWorld();
+
+    // Update intensity based on distance
+    const intensity = calculateLightIntensity(shipPosition, sunPosition);
+    light.intensity = intensity;
   });
 
   return (

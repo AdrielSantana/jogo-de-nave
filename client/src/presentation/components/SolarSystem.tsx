@@ -277,12 +277,13 @@ const planets: PlanetConfig[] = [
 
 const Planet = ({
   config,
+  onUpdatePosition,
 }: {
   config: { planet: PlanetConfig; sun: SunConfig };
+  onUpdatePosition: (position: Vector3) => void;
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const rotationRef = useRef(0);
-  // Add random initial orbital position
   const initialOrbitAngle = useRef(Math.random() * Math.PI * 2);
 
   useFrame((state, delta) => {
@@ -295,13 +296,18 @@ const Planet = ({
       // Rotate planet around its axis
       groupRef.current.rotation.y = rotationRef.current;
 
-      // Orbit around the center with random initial position
+      // Calculate orbital position
       const time = state.clock.getElapsedTime();
       const orbitAngle =
         initialOrbitAngle.current + time * config.planet.orbitSpeed;
       const x = Math.cos(orbitAngle) * config.planet.orbitRadius;
       const z = Math.sin(orbitAngle) * config.planet.orbitRadius;
+
+      // Update position
       groupRef.current.position.set(x, 0, z);
+
+      // Update collision position
+      onUpdatePosition(new Vector3(x, 0, z));
     }
   });
 
@@ -325,14 +331,34 @@ const Planet = ({
 export const SolarSystem = () => {
   const { player } = useGameStore();
 
+  // Track planet positions
+  const planetPositions = useRef(
+    planets.map((planet) => ({
+      position: new Vector3(...planet.position),
+      radius: planet.planetParams.radius,
+    }))
+  );
+
+  // Handler for updating planet positions
+  const handleUpdatePlanetPosition = (index: number) => (position: Vector3) => {
+    planetPositions.current[index].position.copy(position);
+  };
+
   return (
     <group>
       {/* Add the Sun at the center with reduced size */}
       <Sun sunConfig={sunConfig} />
 
       {/* Existing planets */}
-      {planets.map((planet) => (
-        <Planet key={planet.id} config={{ planet, sun: sunConfig }} />
+      {planets.map((planet, index) => (
+        <Planet
+          key={planet.id}
+          config={{
+            planet,
+            sun: sunConfig,
+          }}
+          onUpdatePosition={handleUpdatePlanetPosition(index)}
+        />
       ))}
 
       {player && (
@@ -340,6 +366,7 @@ export const SolarSystem = () => {
           startPosition={new Vector3(400, 0, 0)}
           sunConfig={sunConfig}
           player={player}
+          planets={planetPositions.current}
         />
       )}
     </group>
