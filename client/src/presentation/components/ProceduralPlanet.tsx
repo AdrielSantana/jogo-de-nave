@@ -178,8 +178,12 @@ export const ProceduralPlanet = ({
       meshRef.current.updateWorldMatrix(true, false);
       // Get the inverse of the world matrix
       matrixRef.current.copy(meshRef.current.matrixWorld).invert();
+
+      // Create a fresh vector for light direction
+      const worldLightDir = new THREE.Vector3(...sunPosition).normalize();
+
       // Transform the light direction to object space
-      const objectSpaceLightDir = lightDir
+      const objectSpaceLightDir = worldLightDir
         .clone()
         .applyMatrix4(matrixRef.current)
         .normalize();
@@ -191,15 +195,58 @@ export const ProceduralPlanet = ({
         );
       }
     }
-  }, [lightDir]);
+  }, [sunPosition]);
 
   // Update light direction when rotation changes
   useEffect(() => {
     updateLightDirection();
   }, [updateLightDirection]);
 
-  useFrame(() => {
-    updateLightDirection();
+  useFrame((state) => {
+    if (meshRef.current) {
+      // Get world position and calculate distance
+      meshRef.current.getWorldPosition(worldPosition);
+      const distance =
+        (state.camera.parent?.position.distanceTo(worldPosition) || radius) -
+        radius;
+
+      // Determine appropriate LOD level
+      let newLOD = lodLevels.findIndex((level) => distance < level.distance);
+      if (newLOD === -1) newLOD = lodLevels.length - 1;
+
+      // Update geometry if LOD level changed
+      if (newLOD !== currentLOD.current) {
+        meshRef.current.geometry = lodGeometries[newLOD];
+        currentLOD.current = newLOD;
+
+        planetParams.bumpStrength.value = lodLevels[newLOD].bumpStrength;
+        planetParams.amplitude.value = lodLevels[newLOD].amplitude;
+
+        // Modify atmosphere blend calculation
+        const maxDistance = lodLevels[lodLevels.length - 2].distance;
+        const blend = Math.max(
+          0,
+          Math.min(0.4, (distance - lodLevels[0].distance) / maxDistance) // Reduced from 0.8 to 0.4
+        );
+        planetParams.atmosphereBlend.value = blend * 0.5; // Reduce overall blend effect
+      }
+
+      // Update light direction before intensity calculation
+      updateLightDirection();
+
+      // Calculate distance-based light intensity with updated position
+      const worldPos = meshRef.current.getWorldPosition(worldPosition);
+      const intensity = calculateLightIntensity(
+        worldPos,
+        new THREE.Vector3(...sunPosition),
+        "planet"
+      );
+
+      // Update shader uniforms
+      if (meshRef.current.material instanceof THREE.ShaderMaterial) {
+        meshRef.current.material.uniforms.lightIntensity.value = intensity;
+      }
+    }
   });
 
   // LOD configuration for geometry detail
@@ -296,53 +343,6 @@ export const ProceduralPlanet = ({
     }),
     [radius, amplitude, lightDir, atmosphereColor, atmosphereThickness]
   );
-
-  useFrame((state) => {
-    if (meshRef.current) {
-      // Get world position and calculate distance
-      meshRef.current.getWorldPosition(worldPosition);
-      const distance =
-        (state.camera.parent?.position.distanceTo(worldPosition) || radius) -
-        radius;
-
-      // Determine appropriate LOD level
-      let newLOD = lodLevels.findIndex((level) => distance < level.distance);
-      if (newLOD === -1) newLOD = lodLevels.length - 1;
-
-      // Update geometry if LOD level changed
-      if (newLOD !== currentLOD.current) {
-        meshRef.current.geometry = lodGeometries[newLOD];
-        currentLOD.current = newLOD;
-
-        planetParams.bumpStrength.value = lodLevels[newLOD].bumpStrength;
-        planetParams.amplitude.value = lodLevels[newLOD].amplitude;
-
-        // Modify atmosphere blend calculation
-        const maxDistance = lodLevels[lodLevels.length - 2].distance;
-        const blend = Math.max(
-          0,
-          Math.min(0.4, (distance - lodLevels[0].distance) / maxDistance) // Reduced from 0.8 to 0.4
-        );
-        planetParams.atmosphereBlend.value = blend * 0.5; // Reduce overall blend effect
-      }
-
-      // Update light direction
-      updateLightDirection();
-
-      // Calculate distance-based light intensity
-      const sunPos = new THREE.Vector3(...sunPosition);
-      const intensity = calculateLightIntensity(
-        worldPosition,
-        sunPos,
-        "planet"
-      );
-
-      // Update shader uniforms
-      if (meshRef.current.material instanceof THREE.ShaderMaterial) {
-        meshRef.current.material.uniforms.lightIntensity.value = intensity;
-      }
-    }
-  });
 
   return (
     <>
