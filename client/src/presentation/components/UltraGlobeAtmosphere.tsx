@@ -221,7 +221,6 @@ export const UltraGlobeAtmosphere = ({
         state.clock.getElapsedTime() * windSpeed;
 
       // Weather phase calculations
-      const deltaTime = state.clock.getElapsedTime() - weatherRef.current.time;
       weatherRef.current.time = state.clock.getElapsedTime();
 
       // Calculate current and next phase

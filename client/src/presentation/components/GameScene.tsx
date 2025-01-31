@@ -1,9 +1,8 @@
 import { Canvas } from "@react-three/fiber";
 import { useGameStore } from "../../infrastructure/store/gameStore";
-import { PlayerShip } from "./PlayerShip";
 import { useEffect, useState } from "react";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
-import { Color, Vector3, CubeTextureLoader } from "three";
+import { CubeTextureLoader } from "three";
 import * as THREE from "three";
 import { SolarSystem } from "./SolarSystem";
 import { LoadingScreen } from "./LoadingScreen";
